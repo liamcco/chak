@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+:root { --burgundy: #4a1025; --gold: #e5b85a; --cream: #fff8e8; }
+* { box-sizing: border-box; }
+body { margin: 0; background: radial-gradient(circle at top, #70213c, #120817 60%); color: var(--cream); font-family: Arial, sans-serif; }
+a { color: var(--gold); }
+main { margin: auto; max-width: 48rem; min-height: 100vh; padding: 4rem 1.5rem; }
+h1 { font-family: Georgia, serif; font-size: clamp(3rem, 12vw, 6.5rem); line-height: .9; }
+button, input { font: inherit; padding: .75rem 1rem; }
+button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; font-weight: 700; }
+.card { border: 1px solid #e5b85a66; background: #250d1bd9; padding: 2rem; border-radius: .5rem; }

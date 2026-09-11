@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 export type ApprovalChoice = "yay" | "nay";
-export type NameElection = { id: string; phase: string; revealFrontier?: number; presentationPosition?: number; finalistIds?: number[]; voteTokenAllowance?: number; winnerSuggestionId?: number | null; winnerSuggestionIds?: number[] | null };
+export type NameElection = { id: string; phase: string; revealFrontier?: number; presentationPosition?: number; finalistIds?: number[]; voteTokenAllowance?: number; winnerSuggestionId?: number | null; winnerSuggestionIds?: number[] | null; resultRevealedAt?: Date | null };
 
 export type DraftNameElection = NameElection;
 
@@ -46,6 +46,7 @@ export type FinalVoteOutcome = { status: "unique" | "tied" };
 export type RunoffRound = { id: number; roundNumber: number; finalistIds: number[]; status: "open" | "closed"; winnerIds?: number[] | null };
 export type RunoffBallot = { round: RunoffRound; finalists: Suggestion[]; choice: number | null };
 export type RunoffOverview = RunoffRound & { completedCount: number; participantCount: number; incompleteParticipantIds: number[]; finalists: Suggestion[]; participants: { participantId: number; displayLabel: string; complete: boolean }[] };
+export type PublishedResult = { revealedAt: Date; winners: Suggestion[]; finalists: { suggestion: Suggestion; total: number }[]; turnout: number; participantCount: number };
 
 export type NameElectionTransaction = {
   findElection(): Promise<DraftNameElection | null>;
@@ -76,6 +77,8 @@ export type NameElectionTransaction = {
   listRunoffChoices?(roundId?: number): Promise<{ roundId: number; participantId: number; suggestionId: number }[]>;
   saveRunoffChoice?(roundId: number, participantId: number, suggestionId: number): Promise<void>;
   closeRunoff?(roundId: number, winnerIds: number[]): Promise<RunoffRound>;
+  revealResult?(): Promise<NameElection>;
+  getResultData?(): Promise<{ election: NameElection; suggestions: Suggestion[]; allocations: { participantId: number; suggestionId: number; voteTokens: number }[]; participantCount: number; completedParticipantIds: number[] }>;
 };
 
 export type NameElectionStore = {
@@ -115,6 +118,8 @@ export type NameElectionService = {
   saveRunoffChoice(invitationToken: string, suggestionId: number): Promise<void>;
   closeRunoff(incompleteParticipantIds?: number[]): Promise<{ status: "unique" | "tied"; winnerIds: number[] }>;
   declareJointWinners(): Promise<FinalistPreparation>;
+  revealResult(): Promise<NameElection>;
+  getPublishedResult(): Promise<PublishedResult | null>;
 };
 
 const suggestionCount = 32;
@@ -474,6 +479,24 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
       if (!transaction.saveFinalistPreparation) throw new Error("Runoff is not available");
       const saved = await transaction.saveFinalistPreparation({ finalistIds: round.winnerIds, voteTokenAllowance: 0, winnerSuggestionId: round.winnerIds[0] });
       return { finalistIds: saved.finalistIds ?? [], voteTokenAllowance: saved.voteTokenAllowance ?? 0, winnerSuggestionId: saved.winnerSuggestionId, winnerSuggestionIds: round.winnerIds };
+    }),
+    revealResult: () => store.transaction(async (transaction) => {
+      const election = await transaction.findElection();
+      if (!election || election.phase !== "complete") throw new Error("Result Reveal kan bara öppnas när Winner är frusen");
+      if (election.resultRevealedAt) return election;
+      if (!transaction.revealResult) throw new Error("Result Reveal is not available");
+      return transaction.revealResult();
+    }),
+    getPublishedResult: () => store.transaction(async (transaction) => {
+      const data = transaction.getResultData ? await transaction.getResultData() : null;
+      if (!data?.election.resultRevealedAt) return null;
+      const winnerIds = data.election.winnerSuggestionIds ?? (data.election.winnerSuggestionId ? [data.election.winnerSuggestionId] : []);
+      const winners = data.suggestions.filter((suggestion) => winnerIds.includes(suggestion.id));
+      const finalistIds = data.election.finalistIds?.length ? data.election.finalistIds : winnerIds;
+      const totals = new Map<number, number>();
+      for (const allocation of data.allocations.filter((a) => data.completedParticipantIds.includes(a.participantId))) totals.set(allocation.suggestionId, (totals.get(allocation.suggestionId) ?? 0) + allocation.voteTokens);
+      const finalists = data.suggestions.filter((suggestion) => finalistIds.includes(suggestion.id)).map((suggestion) => ({ suggestion, total: totals.get(suggestion.id) ?? 0 })).sort((a, b) => b.total - a.total || a.suggestion.position - b.suggestion.position);
+      return { revealedAt: data.election.resultRevealedAt, winners, finalists, turnout: data.completedParticipantIds.length, participantCount: data.participantCount };
     }),
   };
 }

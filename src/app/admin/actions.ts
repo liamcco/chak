@@ -48,3 +48,4 @@ export async function closeFinalVote(incompleteParticipantIds: number[] = []) { 
 export async function openRunoff() { await requireAdministrator(); return nameElectionService.openRunoff(); }
 export async function closeRunoff(incompleteParticipantIds: number[] = []) { await requireAdministrator(); return nameElectionService.closeRunoff(incompleteParticipantIds); }
 export async function declareJointWinners() { await requireAdministrator(); return nameElectionService.declareJointWinners(); }
+export async function revealResult() { await requireAdministrator(); return nameElectionService.revealResult(); }

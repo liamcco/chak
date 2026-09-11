@@ -26,7 +26,7 @@ export const postgresNameElectionStore: NameElectionStore = {
     return operation({
     findElection: async () => {
       const election = await transaction.query.elections.findFirst();
-      return election ? { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds } : null;
+      return election ? { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds, resultRevealedAt: election.resultRevealedAt } : null;
     },
     insertDraftElection: async () => {
       const [election] = await transaction.insert(elections).values({ id: singletonElectionId, phase: "draft" }).onConflictDoNothing().returning();
@@ -35,7 +35,7 @@ export const postgresNameElectionStore: NameElectionStore = {
         if (!existing) throw new Error("The Draft Name Election could not be established");
         return { id: existing.id, phase: existing.phase };
       }
-      return { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds };
+      return { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds, resultRevealedAt: election.resultRevealedAt };
     },
     listSuggestions,
     replaceSuggestions: async (nextSuggestions) => {
@@ -134,6 +134,19 @@ export const postgresNameElectionStore: NameElectionStore = {
       if (!round) throw new Error("Runoff kunde inte stängas");
       await transaction.update(elections).set({ phase: winnerIds.length === 1 ? "complete" : "runoff-closed", winnerSuggestionId: winnerIds.length === 1 ? winnerIds[0] : null, winnerSuggestionIds: winnerIds.length === 1 ? winnerIds : null, stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId));
       return { id: round.id, roundNumber: round.roundNumber, finalistIds: round.finalistIds, status: "closed" as const, winnerIds: round.winnerIds };
+    },
+    revealResult: async () => {
+      const [updated] = await transaction.update(elections).set({ resultRevealedAt: new Date(), stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
+      if (!updated) throw new Error("Result Reveal kunde inte publiceras");
+      return { id: updated.id, phase: updated.phase, finalistIds: updated.finalistIds, winnerSuggestionId: updated.winnerSuggestionId, winnerSuggestionIds: updated.winnerSuggestionIds, resultRevealedAt: updated.resultRevealedAt };
+    },
+    getResultData: async () => {
+      const election = await transaction.query.elections.findFirst();
+      if (!election) throw new Error("Namnvalet finns inte");
+      const allocations = await transaction.select({ participantId: finalVotes.participantId, suggestionId: finalVotes.suggestionId, voteTokens: finalVotes.voteTokens }).from(finalVotes).where(eq(finalVotes.electionId, singletonElectionId));
+      const roster = await listParticipants();
+      const completedParticipantIds = roster.filter((p) => allocations.filter((a) => a.participantId === p.id).reduce((sum, a) => sum + a.voteTokens, 0) === election.voteTokenAllowance).map((p) => p.id);
+      return { election: { id: election.id, phase: election.phase, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds, resultRevealedAt: election.resultRevealedAt }, suggestions: await listSuggestions(), allocations, participantCount: roster.length, completedParticipantIds };
     },
     });
   }),

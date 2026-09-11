@@ -15,6 +15,7 @@ export const elections = pgTable("elections", {
   voteTokenAllowance: integer("vote_token_allowance").notNull().default(3),
   winnerSuggestionId: integer("winner_suggestion_id"),
   winnerSuggestionIds: integer("winner_suggestion_ids").array(),
+  resultRevealedAt: timestamp("result_revealed_at", { withTimezone: true }),
   stateVersion: integer("state_version").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

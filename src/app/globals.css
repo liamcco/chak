@@ -17,6 +17,18 @@ button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; fo
 .participant-list button, .participant-list input, .card > button { margin: .5rem .5rem 0 0; padding: .4rem .6rem; }
 .presentation { max-width: 80rem; text-align: center; display: grid; place-content: center; }
 .presentation h1 { color: var(--gold); }
+.result-reveal { width: min(100%, 62rem); text-align: center; }
+.result-reveal h1 { color: var(--gold); margin: .25rem 0 2rem; }
+.eyebrow { letter-spacing: .3rem; color: var(--gold); }
+.curtain { font-size: 3rem; color: var(--gold); letter-spacing: 1rem; padding: 1rem; background: linear-gradient(90deg, #4a1025 0 18%, transparent 18% 82%, #4a1025 82%); }
+.winners { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+.winner { background: #250d1b; border: 2px solid var(--gold); padding: 1.5rem; min-width: 16rem; box-shadow: 0 0 2rem #e5b85a66; }
+.winner span { display: block; font-size: 2rem; color: var(--gold); }
+.winner strong { display: block; font: 2.5rem Georgia, serif; color: var(--cream); }
+.final-totals { text-align: left; max-width: 34rem; margin: auto; }
+.final-totals li { display: flex; justify-content: space-between; gap: 1rem; padding: .7rem; border-bottom: 1px solid #e5b85a66; }
+.turnout { color: var(--gold); font-weight: 700; }
+.result-reveal::after { content: "✦  ·  ✧  ·  ✦  ·  ✧  ·  ✦"; display: block; color: var(--gold); font-size: 1.7rem; letter-spacing: .5rem; margin-top: 2rem; animation: arrive 1s ease both; }
 .motivation { font: 1.5rem Georgia, serif; }
 .ballot h2 { font-size: 2.5rem; }
 .ballot button { margin: .5rem; min-width: 8rem; }
@@ -32,4 +44,4 @@ button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; fo
 .tokens span { display: inline-block; animation: token-arrive .25s ease both; }
 @keyframes token-arrive { from { opacity: 0; transform: scale(.4) translateY(.4rem); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes arrive { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
-@media (prefers-reduced-motion: reduce) { .caught-up { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .caught-up, .winner { animation: none; transition: none; } }

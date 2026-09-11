@@ -17,4 +17,18 @@ describeWithDatabase("Postgres NameElectionStore", () => {
     await expect(service.getDraft()).resolves.toEqual(first);
     await expect(service.establishDraft()).resolves.toEqual(first);
   });
+
+  it("atomically replaces and reorders the Draft Suggestion set", async () => {
+    const { postgresNameElectionStore } = await import("./postgres-store");
+    const service = createNameElectionService(postgresNameElectionStore);
+    await service.establishDraft();
+    const imported = Array.from({ length: 32 }, (_, position) => ({ suggestion: `Namn ${position + 1}`, motivation: `Motivation ${position + 1}` }));
+
+    await expect(service.replaceSuggestions(imported)).resolves.toHaveLength(32);
+    await expect(service.replaceSuggestions(imported.slice(0, 31))).rejects.toThrow("exactly 32");
+    await expect(service.listSuggestions()).resolves.toMatchObject(imported.map((suggestion, position) => ({ ...suggestion, position })));
+
+    const ids = (await service.listSuggestions()).map(({ id }) => id).reverse();
+    await expect(service.reorderSuggestions(ids)).resolves.toSatisfy((result) => result[0]?.suggestion === "Namn 32" && result[0]?.position === 0);
+  });
 });

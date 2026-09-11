@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, pgEnum, pgTable, timestamp, uuid, integer } from "drizzle-orm/pg-core";
+import { check, pgEnum, pgTable, timestamp, uuid, integer, serial, text, unique } from "drizzle-orm/pg-core";
 
 export const electionPhase = pgEnum("election_phase", ["draft"]);
 
@@ -14,3 +14,11 @@ export const elections = pgTable("elections", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [check("elections_singleton", sql`${table.id} = ${singletonElectionId}::uuid`)]);
+
+export const suggestions = pgTable("suggestions", {
+  id: serial("id").primaryKey(),
+  electionId: uuid("election_id").notNull().references(() => elections.id, { onDelete: "cascade" }),
+  position: integer("position").notNull(),
+  suggestion: text("suggestion").notNull(),
+  motivation: text("motivation").notNull(),
+}, (table) => [unique("suggestions_election_position_unique").on(table.electionId, table.position)]);

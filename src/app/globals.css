@@ -9,3 +9,6 @@ h1 { font-family: Georgia, serif; font-size: clamp(3rem, 12vw, 6.5rem); line-hei
 button, input { font: inherit; padding: .75rem 1rem; }
 button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; font-weight: 700; }
 .card { border: 1px solid #e5b85a66; background: #250d1bd9; padding: 2rem; border-radius: .5rem; }
+.suggestion-list { padding-left: 1.5rem; }
+.suggestion-list li { margin: 1rem 0; }
+.suggestion-list button { margin: .5rem .5rem 0 0; padding: .4rem .6rem; }

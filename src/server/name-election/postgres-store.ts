@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { approvalChoices, elections, finalVotes, participants, runoffChoices, runoffRounds, singletonElectionId, suggestions } from "@/server/db/schema";
-import type { ApprovalChoice, ApprovalState, FinalistPreparation, NameElectionStore } from "./service";
+import { approvalChoices, elections, finalVotes, participants, resultSnapshots, runoffChoices, runoffRounds, singletonElectionId, suggestions } from "@/server/db/schema";
+import type { ApprovalChoice, ApprovalState, FinalistPreparation, NameElectionStore, ResultExport } from "./service";
 
 export const postgresNameElectionStore: NameElectionStore = {
   transaction: (operation) => db.transaction(async (transaction) => {
@@ -146,7 +146,17 @@ export const postgresNameElectionStore: NameElectionStore = {
       const allocations = await transaction.select({ participantId: finalVotes.participantId, suggestionId: finalVotes.suggestionId, voteTokens: finalVotes.voteTokens }).from(finalVotes).where(eq(finalVotes.electionId, singletonElectionId));
       const roster = await listParticipants();
       const completedParticipantIds = roster.filter((p) => allocations.filter((a) => a.participantId === p.id).reduce((sum, a) => sum + a.voteTokens, 0) === election.voteTokenAllowance).map((p) => p.id);
-      return { election: { id: election.id, phase: election.phase, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds, resultRevealedAt: election.resultRevealedAt }, suggestions: await listSuggestions(), allocations, participantCount: roster.length, completedParticipantIds };
+      return { election: { id: election.id, phase: election.phase, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds, resultRevealedAt: election.resultRevealedAt }, suggestions: await listSuggestions(), allocations, participantCount: roster.length, completedParticipantIds, approvalChoices: await transaction.select({ suggestionId: approvalChoices.suggestionId, participantId: approvalChoices.participantId, choice: approvalChoices.choice }).from(approvalChoices).where(eq(approvalChoices.electionId, singletonElectionId)), runoffChoices: await transaction.select({ roundId: runoffChoices.roundId, participantId: runoffChoices.participantId, suggestionId: runoffChoices.suggestionId }).from(runoffChoices).where(sql`${runoffChoices.roundId} IN (SELECT id FROM runoff_rounds WHERE election_id = ${singletonElectionId}::uuid)`) };
+    },
+    getResultSnapshot: async () => {
+      const snapshot = await transaction.query.resultSnapshots.findFirst({ where: eq(resultSnapshots.electionId, singletonElectionId) });
+      return (snapshot?.payload as ResultExport | undefined) ?? null;
+    },
+    saveSnapshotAndErase: async (snapshot: ResultExport) => {
+      await transaction.insert(resultSnapshots).values({ electionId: singletonElectionId, payload: snapshot }).onConflictDoNothing();
+      const saved = await transaction.query.resultSnapshots.findFirst({ where: eq(resultSnapshots.electionId, singletonElectionId) });
+      if (!saved || JSON.stringify(saved.payload) !== JSON.stringify(snapshot)) throw new Error("Aggregate snapshot verification failed");
+      await transaction.delete(participants).where(eq(participants.electionId, singletonElectionId));
     },
     });
   }),

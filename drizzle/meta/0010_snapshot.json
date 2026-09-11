@@ -1,0 +1,719 @@
+{
+  "id": "4e052a14-0de3-44c9-b57e-8327e6b0bab6",
+  "prevId": "0b15761f-410f-4b2a-861e-8125cf553f61",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.approval_choices": {
+      "name": "approval_choices",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "election_id": {
+          "name": "election_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_id": {
+          "name": "participant_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "suggestion_id": {
+          "name": "suggestion_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "choice": {
+          "name": "choice",
+          "type": "approval_choice",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "approval_choices_election_id_elections_id_fk": {
+          "name": "approval_choices_election_id_elections_id_fk",
+          "tableFrom": "approval_choices",
+          "tableTo": "elections",
+          "columnsFrom": [
+            "election_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "approval_choices_participant_id_participants_id_fk": {
+          "name": "approval_choices_participant_id_participants_id_fk",
+          "tableFrom": "approval_choices",
+          "tableTo": "participants",
+          "columnsFrom": [
+            "participant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "approval_choices_suggestion_id_suggestions_id_fk": {
+          "name": "approval_choices_suggestion_id_suggestions_id_fk",
+          "tableFrom": "approval_choices",
+          "tableTo": "suggestions",
+          "columnsFrom": [
+            "suggestion_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "approval_choices_participant_suggestion_unique": {
+          "name": "approval_choices_participant_suggestion_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "participant_id",
+            "suggestion_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.elections": {
+      "name": "elections",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "phase": {
+          "name": "phase",
+          "type": "election_phase",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "reveal_frontier": {
+          "name": "reveal_frontier",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": -1
+        },
+        "presentation_position": {
+          "name": "presentation_position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": -1
+        },
+        "finalist_ids": {
+          "name": "finalist_ids",
+          "type": "integer[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::integer[]"
+        },
+        "vote_token_allowance": {
+          "name": "vote_token_allowance",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 3
+        },
+        "winner_suggestion_id": {
+          "name": "winner_suggestion_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "winner_suggestion_ids": {
+          "name": "winner_suggestion_ids",
+          "type": "integer[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "result_revealed_at": {
+          "name": "result_revealed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "state_version": {
+          "name": "state_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "elections_singleton": {
+          "name": "elections_singleton",
+          "value": "\"elections\".\"id\" = $1::uuid"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.final_votes": {
+      "name": "final_votes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "election_id": {
+          "name": "election_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_id": {
+          "name": "participant_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "suggestion_id": {
+          "name": "suggestion_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "vote_tokens": {
+          "name": "vote_tokens",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "final_votes_election_id_elections_id_fk": {
+          "name": "final_votes_election_id_elections_id_fk",
+          "tableFrom": "final_votes",
+          "tableTo": "elections",
+          "columnsFrom": [
+            "election_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "final_votes_participant_id_participants_id_fk": {
+          "name": "final_votes_participant_id_participants_id_fk",
+          "tableFrom": "final_votes",
+          "tableTo": "participants",
+          "columnsFrom": [
+            "participant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "final_votes_suggestion_id_suggestions_id_fk": {
+          "name": "final_votes_suggestion_id_suggestions_id_fk",
+          "tableFrom": "final_votes",
+          "tableTo": "suggestions",
+          "columnsFrom": [
+            "suggestion_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "final_votes_participant_suggestion_unique": {
+          "name": "final_votes_participant_suggestion_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "participant_id",
+            "suggestion_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "final_votes_non_negative": {
+          "name": "final_votes_non_negative",
+          "value": "\"final_votes\".\"vote_tokens\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.participants": {
+      "name": "participants",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "election_id": {
+          "name": "election_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_label": {
+          "name": "display_label",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invitation_token": {
+          "name": "invitation_token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_activity_at": {
+          "name": "last_activity_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "participants_election_display_label_normalized_unique": {
+          "name": "participants_election_display_label_normalized_unique",
+          "columns": [
+            {
+              "expression": "election_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"display_label\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "participants_election_id_elections_id_fk": {
+          "name": "participants_election_id_elections_id_fk",
+          "tableFrom": "participants",
+          "tableTo": "elections",
+          "columnsFrom": [
+            "election_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "participants_invitation_token_unique": {
+          "name": "participants_invitation_token_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "invitation_token"
+          ]
+        },
+        "participants_election_display_label_unique": {
+          "name": "participants_election_display_label_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "election_id",
+            "display_label"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.result_snapshots": {
+      "name": "result_snapshots",
+      "schema": "",
+      "columns": {
+        "election_id": {
+          "name": "election_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "result_snapshots_election_id_elections_id_fk": {
+          "name": "result_snapshots_election_id_elections_id_fk",
+          "tableFrom": "result_snapshots",
+          "tableTo": "elections",
+          "columnsFrom": [
+            "election_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.runoff_choices": {
+      "name": "runoff_choices",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "round_id": {
+          "name": "round_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "participant_id": {
+          "name": "participant_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "suggestion_id": {
+          "name": "suggestion_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "runoff_choices_round_id_runoff_rounds_id_fk": {
+          "name": "runoff_choices_round_id_runoff_rounds_id_fk",
+          "tableFrom": "runoff_choices",
+          "tableTo": "runoff_rounds",
+          "columnsFrom": [
+            "round_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "runoff_choices_participant_id_participants_id_fk": {
+          "name": "runoff_choices_participant_id_participants_id_fk",
+          "tableFrom": "runoff_choices",
+          "tableTo": "participants",
+          "columnsFrom": [
+            "participant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "runoff_choices_suggestion_id_suggestions_id_fk": {
+          "name": "runoff_choices_suggestion_id_suggestions_id_fk",
+          "tableFrom": "runoff_choices",
+          "tableTo": "suggestions",
+          "columnsFrom": [
+            "suggestion_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "runoff_choices_participant_round_unique": {
+          "name": "runoff_choices_participant_round_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "round_id",
+            "participant_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.runoff_rounds": {
+      "name": "runoff_rounds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "election_id": {
+          "name": "election_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "round_number": {
+          "name": "round_number",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finalist_ids": {
+          "name": "finalist_ids",
+          "type": "integer[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'open'"
+        },
+        "winner_ids": {
+          "name": "winner_ids",
+          "type": "integer[]",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "runoff_rounds_election_id_elections_id_fk": {
+          "name": "runoff_rounds_election_id_elections_id_fk",
+          "tableFrom": "runoff_rounds",
+          "tableTo": "elections",
+          "columnsFrom": [
+            "election_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "runoff_round_election_number_unique": {
+          "name": "runoff_round_election_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "election_id",
+            "round_number"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.suggestions": {
+      "name": "suggestions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "serial",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "election_id": {
+          "name": "election_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "suggestion": {
+          "name": "suggestion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motivation": {
+          "name": "motivation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "suggestions_election_id_elections_id_fk": {
+          "name": "suggestions_election_id_elections_id_fk",
+          "tableFrom": "suggestions",
+          "tableTo": "elections",
+          "columnsFrom": [
+            "election_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "suggestions_election_position_unique": {
+          "name": "suggestions_election_position_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "election_id",
+            "position"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.approval_choice": {
+      "name": "approval_choice",
+      "schema": "public",
+      "values": [
+        "yay",
+        "nay"
+      ]
+    },
+    "public.election_phase": {
+      "name": "election_phase",
+      "schema": "public",
+      "values": [
+        "draft",
+        "approval-open",
+        "approval-closed",
+        "final-prepared",
+        "final-open",
+        "final-closed",
+        "runoff-open",
+        "runoff-closed",
+        "complete"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

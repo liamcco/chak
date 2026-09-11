@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, pgEnum, pgTable, timestamp, uuid, integer, serial, text, unique, uniqueIndex } from "drizzle-orm/pg-core";
+import { check, pgEnum, pgTable, timestamp, uuid, integer, serial, text, unique, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 
 export const electionPhase = pgEnum("election_phase", ["draft", "approval-open", "approval-closed", "final-prepared", "final-open", "final-closed", "runoff-open", "runoff-closed", "complete"]);
 export const approvalChoice = pgEnum("approval_choice", ["yay", "nay"]);
@@ -77,3 +77,9 @@ export const runoffChoices = pgTable("runoff_choices", {
   suggestionId: integer("suggestion_id").notNull().references(() => suggestions.id, { onDelete: "cascade" }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [unique("runoff_choices_participant_round_unique").on(table.roundId, table.participantId)]);
+
+export const resultSnapshots = pgTable("result_snapshots", {
+  electionId: uuid("election_id").primaryKey().references(() => elections.id, { onDelete: "cascade" }),
+  payload: jsonb("payload").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

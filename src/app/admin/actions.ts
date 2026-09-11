@@ -49,3 +49,4 @@ export async function openRunoff() { await requireAdministrator(); return nameEl
 export async function closeRunoff(incompleteParticipantIds: number[] = []) { await requireAdministrator(); return nameElectionService.closeRunoff(incompleteParticipantIds); }
 export async function declareJointWinners() { await requireAdministrator(); return nameElectionService.declareJointWinners(); }
 export async function revealResult() { await requireAdministrator(); return nameElectionService.revealResult(); }
+export async function cleanupPersonalData(confirmation: string) { await requireAdministrator(); return nameElectionService.cleanupPersonalData(confirmation); }

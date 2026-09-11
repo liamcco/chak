@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Körnamnsvalet is a one-time Swedish-language website through which a choir selects its name. It imports 32 anonymous Suggestions, each consisting of a proposed name and its motivation, and conducts an Administrator-led Approval Round followed by a configurable Final Vote and, when needed, Runoffs.
+Körnamnsvalet is a one-time Swedish-language website through which a choir selects its name. It imports anonymous Suggestions, each consisting of a proposed name and its motivation, and conducts an Administrator-led Approval Round followed by a configurable Final Vote and, when needed, Runoffs.
 
 The experience is designed for a live choir gathering. Participants vote on phones while a shared presentation follows the Administrator's lead. The site uses ordinary HTTP requests and polling rather than real-time infrastructure.
 
@@ -77,7 +77,7 @@ suggestion,motivation
 
 Standard quoted CSV fields may contain commas, quotation marks, and line breaks. The browser shows a validated preview of every row before import. The file itself is never retained.
 
-The source dataset is trusted to contain 32 unique, suitable Suggestions. Every motivation is always displayed together with its Suggestion. Imported order is preserved initially, and the Administrator may reorder Suggestions during Draft.
+The source dataset is trusted to contain one or more unique, suitable Suggestions. Every motivation is always displayed together with its Suggestion. Imported order is preserved initially, and the Administrator may reorder Suggestions during Draft.
 
 A later import during Draft replaces all Suggestions after explicit confirmation. Import becomes unavailable once the Approval Round opens.
 
@@ -233,7 +233,7 @@ Open voting and presentation screens poll every two to three seconds and also ex
 
 ## Acceptance criteria
 
-- An Administrator can import and preview the 32 Suggestions and manually create the roster.
+- An Administrator can import and preview Suggestions and manually create the roster.
 - Every Participant receives a unique working link, and the combined-message clipboard format is exact.
 - A Participant cannot access or write a vote for an unrevealed Suggestion.
 - Presentation navigation can revisit revealed Suggestions without moving the Reveal Frontier backward.

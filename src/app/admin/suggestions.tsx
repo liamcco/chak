@@ -55,13 +55,13 @@ export function SuggestionsSetup({ initialSuggestions }: SuggestionsSetupProps) 
 
   return <section className="card" aria-labelledby="suggestions-heading">
     <h2 id="suggestions-heading">Suggestions</h2>
-    <p>Importera den betrodda CSV-filen med 32 Suggestions. Filen sparas aldrig.</p>
+    <p>Importera en betrodd CSV-fil med valfritt antal Suggestions. Filen sparas aldrig.</p>
     <label htmlFor="suggestions-csv">CSV-fil</label>
     <input id="suggestions-csv" name="suggestions-csv" type="file" accept=".csv,text/csv" disabled={pending} onChange={(event) => void selectFile(event.currentTarget.files?.[0])} />
     {message ? <p role="status">{message}</p> : null}
     {preview ? <div aria-labelledby="preview-heading">
       <h3 id="preview-heading">Bekräfta {suggestions.length ? "ersättning" : "import"}</h3>
-      <p>Granska alla 32 Suggestions i källordning innan de sparas.</p>
+      <p>Granska alla Suggestions i källordning innan de sparas.</p>
       <SuggestionsList suggestions={preview} />
       <button type="button" disabled={pending} onClick={confirmImport}>Bekräfta import</button>
       <button type="button" disabled={pending} onClick={() => { setPreview(null); setMessage("Importen avbröts."); }}>Avbryt</button>

@@ -128,12 +128,10 @@ export type NameElectionService = {
   cleanupPersonalData(confirmation: string): Promise<void>;
 };
 
-const suggestionCount = 32;
-
 function validateSuggestions(suggestions: NewSuggestion[]) {
   const parsed = z.array(z.object({ suggestion: z.string(), motivation: z.string() })).safeParse(suggestions);
   if (!parsed.success) throw new Error("Every Suggestion and motivation must be text");
-  if (parsed.data.length !== suggestionCount) throw new Error(`The Name Election needs exactly ${suggestionCount} Suggestions`);
+  if (!parsed.data.length) throw new Error("The Name Election needs at least one Suggestion");
   if (parsed.data.some(({ suggestion, motivation }) => !suggestion.trim() || !motivation.trim())) {
     throw new Error("Every Suggestion and motivation must be filled in");
   }
@@ -295,7 +293,7 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
       if (election.phase === "approval-open" || election.phase === "approval-closed") return approvalState(transaction);
       if (election.phase !== "draft") throw new Error("Approval Round kan bara öppnas från Draft");
       if (!(await transaction.listParticipants()).length) throw new Error("Minst en Participant krävs");
-      if ((await transaction.listSuggestions()).length !== suggestionCount) throw new Error("Alla 32 Suggestions krävs");
+      if (!(await transaction.listSuggestions()).length) throw new Error("Minst en Suggestion krävs");
       const t = requireApprovalMethods(transaction);
       return t.openApprovalRound!();
     }),

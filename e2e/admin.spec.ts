@@ -96,8 +96,8 @@ test("Administrator previews, imports, and reorders the complete Suggestion set"
   await page.getByLabel("CSV-fil").setInputFiles({ name: "replacement.csv", mimeType: "text/csv", buffer: Buffer.from(replacement) });
   await page.getByRole("button", { name: "Bekräfta import" }).click();
   await expect(page.getByRole("heading", { name: "Utkastets Suggestions" }).locator("..").getByRole("listitem").first()).toContainText("Ersättning 1");
-  await page.getByLabel("CSV-fil").setInputFiles({ name: "invalid.csv", mimeType: "text/csv", buffer: Buffer.from("suggestion,motivation\nBara en rad,Varför") });
-  await expect(page.getByText(/måste innehålla exakt 32 Suggestions/)).toBeVisible();
+  await page.getByLabel("CSV-fil").setInputFiles({ name: "invalid.csv", mimeType: "text/csv", buffer: Buffer.from("suggestion,motivation\n") });
+  await expect(page.getByText(/måste innehålla minst en Suggestion/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Utkastets Suggestions" }).locator("..").getByRole("listitem").first()).toContainText("Ersättning 1");
 
   await page.getByRole("button", { name: "Flytta ner" }).first().click();

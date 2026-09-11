@@ -25,7 +25,7 @@ describeWithDatabase("Postgres NameElectionStore", () => {
     const imported = Array.from({ length: 32 }, (_, position) => ({ suggestion: `Namn ${position + 1}`, motivation: `Motivation ${position + 1}` }));
 
     await expect(service.replaceSuggestions(imported)).resolves.toHaveLength(32);
-    await expect(service.replaceSuggestions(imported.slice(0, 31))).rejects.toThrow("exactly 32");
+  await expect(service.replaceSuggestions(imported.slice(0, 1))).resolves.toHaveLength(1);
     await expect(service.listSuggestions()).resolves.toMatchObject(imported.map((suggestion, position) => ({ ...suggestion, position })));
 
     const ids = (await service.listSuggestions()).map(({ id }) => id).reverse();

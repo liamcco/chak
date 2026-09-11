@@ -41,7 +41,7 @@ export function parseSuggestionsCsv(source: string): ParsedSuggestion[] {
   if (!header || header.length !== 2 || header[0]?.replace(/^\uFEFF/, "") !== "suggestion" || header[1] !== "motivation") {
     throw new Error("CSV-filen måste ha exakt rubrikerna suggestion,motivation.");
   }
-  if (data.length !== 32) throw new Error(`CSV-filen måste innehålla exakt 32 Suggestions, inte ${data.length}.`);
+  if (!data.length) throw new Error("CSV-filen måste innehålla minst en Suggestion.");
   return data.map((row, index) => {
     if (row.length !== 2) throw new Error(`Rad ${index + 2} måste innehålla exakt två fält.`);
     const [suggestion, motivation] = row;

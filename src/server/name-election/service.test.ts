@@ -84,8 +84,8 @@ describe("NameElectionService", () => {
     expect(elections).toHaveLength(1);
   });
 
-  it("replaces the Draft Suggestion set only when all 32 Suggestions are valid", async () => {
-    const suggestions = Array.from({ length: 32 }, (_, position) => ({
+  it("replaces the Draft Suggestion set when one or more Suggestions are valid", async () => {
+    const suggestions = Array.from({ length: 3 }, (_, position) => ({
       id: position + 1,
       position,
       suggestion: `Suggestion ${position + 1}`,
@@ -109,12 +109,12 @@ describe("NameElectionService", () => {
       }),
     };
     const service = createNameElectionService(store);
-    const imported = Array.from({ length: 32 }, (_, position) => ({ suggestion: `Name ${position + 1}`, motivation: `Why ${position + 1}` }));
+    const imported = Array.from({ length: 3 }, (_, position) => ({ suggestion: `Name ${position + 1}`, motivation: `Why ${position + 1}` }));
 
     await expect(service.replaceSuggestions(imported)).resolves.toSatisfy((result) => result[0]?.position === 0 && result[0]?.suggestion === "Name 1");
-    await expect(service.replaceSuggestions(imported.slice(0, 31))).rejects.toThrow("exactly 32");
-    await expect(service.listSuggestions()).resolves.toHaveLength(32);
-    await expect(service.reorderSuggestions([...store.suggestions].reverse().map(({ id }) => id))).resolves.toSatisfy((result) => result[0]?.position === 0 && result[0]?.suggestion === "Name 32");
+    await expect(service.replaceSuggestions(imported.slice(0, 2))).resolves.toHaveLength(2);
+    await expect(service.listSuggestions()).resolves.toHaveLength(2);
+    await expect(service.reorderSuggestions([...store.suggestions].reverse().map(({ id }) => id))).resolves.toSatisfy((result) => result[0]?.position === 0 && result[0]?.suggestion === "Name 2");
   });
 
   it("rejects direct Suggestion commands once Draft has ended", async () => {
@@ -128,7 +128,7 @@ describe("NameElectionService", () => {
         ...noParticipants,
       }),
     });
-    const imported = Array.from({ length: 32 }, (_, position) => ({ suggestion: `Name ${position + 1}`, motivation: `Why ${position + 1}` }));
+    const imported = [{ suggestion: "Name", motivation: "Why" }];
 
     await expect(service.replaceSuggestions(imported)).rejects.toThrow("only be changed during Draft");
     await expect(service.reorderSuggestions([])).rejects.toThrow("only be changed during Draft");

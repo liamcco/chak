@@ -14,6 +14,19 @@ must be a dedicated disposable database. Those commands refuse to run otherwise 
 to the test database. Playwright uses it plus separate browser contexts for an authenticated Administrator
 and an unauthenticated visitor.
 
+## Vercel operations
+
+Configure these Vercel project environment variables for the Production environment:
+
+- `POSTGRES_URL`: the production Postgres connection URL
+- `ADMIN_PASSWORD`: the Administrator password
+- `SESSION_SECRET`: a random value of at least 32 characters
+
+After deploying a new version, run `bun run db:migrate` once against the production `POSTGRES_URL`
+from a trusted environment. Deployments and `bun run build` never migrate or mutate the schema.
+Keep a separate disposable `TEST_POSTGRES_URL` for local integration and Playwright tests; never point
+it at the production database.
+
 ## Design documents
 
 - [Product design](docs/product-design.md)

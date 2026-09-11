@@ -8,6 +8,8 @@ main { margin: auto; max-width: 48rem; min-height: 100vh; padding: 4rem 1.5rem; 
 h1 { font-family: Georgia, serif; font-size: clamp(3rem, 12vw, 6.5rem); line-height: .9; }
 button, input { font: inherit; padding: .75rem 1rem; }
 button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; font-weight: 700; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid var(--cream); outline-offset: 3px; }
+button:disabled { cursor: not-allowed; opacity: .6; }
 .card { border: 1px solid #e5b85a66; background: #250d1bd9; padding: 2rem; border-radius: .5rem; }
 .suggestion-list { padding-left: 1.5rem; }
 .suggestion-list li { margin: 1rem 0; }
@@ -44,4 +46,5 @@ button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; fo
 .tokens span { display: inline-block; animation: token-arrive .25s ease both; }
 @keyframes token-arrive { from { opacity: 0; transform: scale(.4) translateY(.4rem); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes arrive { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 30rem) { main { padding: 2rem 1rem; } .card { padding: 1.25rem; } h1 { font-size: clamp(2.5rem, 15vw, 4rem); } .final-totals li { align-items: flex-start; flex-direction: column; } }
 @media (prefers-reduced-motion: reduce) { .caught-up, .winner { animation: none; transition: none; } }

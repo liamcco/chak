@@ -12,7 +12,7 @@ export function ApprovalBallot({ token, participant, initial }: { token: string;
   const firstUnanswered = useMemo(() => suggestions.findIndex((item) => !item.choice), [suggestions]);
 
   useEffect(() => {
-    const refresh = async () => { try { const next = await getApproval(token); if (!next) return; setSuggestions((old) => next.suggestions.map((item) => { const previous = old.find((candidate) => candidate.id === item.id); return previous && ["pending", "retrying", "failed"].includes(previous.saveState) ? { ...item, saveState: previous.saveState, failedChoice: previous.failedChoice } : { ...item, saveState: item.choice ? "confirmed" : "confirmed" }; })); } catch { /* silent polling */ } };
+    const refresh = async () => { try { const next = await getApproval(token); if (!next) return; if (next.state.phase !== "approval-open") { window.location.reload(); return; } setSuggestions((old) => next.suggestions.map((item) => { const previous = old.find((candidate) => candidate.id === item.id); return previous && ["pending", "retrying", "failed"].includes(previous.saveState) ? { ...item, saveState: previous.saveState, failedChoice: previous.failedChoice } : { ...item, saveState: item.choice ? "confirmed" : "confirmed" }; })); } catch { /* silent polling */ } };
     const timer = window.setInterval(() => void refresh(), 2500); return () => window.clearInterval(timer);
   }, [token]);
 

@@ -1,12 +1,14 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { FinalBallot as FinalBallotData } from "@/server/name-election/service";
 import { getFinalVote, saveFinalAllocation } from "../actions";
 
 export function FinalBallot({ token, participant, initial }: { token: string; participant: string; initial: FinalBallotData }) {
   const [allocations, setAllocations] = useState(initial.allocations);
   const [pending, startTransition] = useTransition();
-  useEffect(() => { const timer = window.setInterval(async () => { const next = await getFinalVote(token); if (next) setAllocations(next.ballot.allocations); }, 2500); return () => window.clearInterval(timer); }, [token]);
+  const router = useRouter();
+  useEffect(() => { const refresh = async () => { try { const next = await getFinalVote(token); if (next) setAllocations(next.ballot.allocations); else router.refresh(); } catch { router.refresh(); } }; const timer = window.setInterval(() => void refresh(), 2500); return () => window.clearInterval(timer); }, [router, token]);
   const used = allocations.reduce((sum, a) => sum + a.voteTokens, 0);
   function change(suggestionId: number, amount: number) {
     const current = allocations.find((a) => a.suggestionId === suggestionId)?.voteTokens ?? 0;

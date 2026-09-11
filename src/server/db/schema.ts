@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, pgEnum, pgTable, timestamp, uuid, integer, serial, text, unique } from "drizzle-orm/pg-core";
+import { check, pgEnum, pgTable, timestamp, uuid, integer, serial, text, unique, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const electionPhase = pgEnum("election_phase", ["draft"]);
 
@@ -22,3 +22,13 @@ export const suggestions = pgTable("suggestions", {
   suggestion: text("suggestion").notNull(),
   motivation: text("motivation").notNull(),
 }, (table) => [unique("suggestions_election_position_unique").on(table.electionId, table.position)]);
+
+export const participants = pgTable("participants", {
+  id: serial("id").primaryKey(),
+  electionId: uuid("election_id").notNull().references(() => elections.id, { onDelete: "cascade" }),
+  displayLabel: text("display_label").notNull(),
+  invitationToken: text("invitation_token").notNull().unique(),
+}, (table) => [
+  unique("participants_election_display_label_unique").on(table.electionId, table.displayLabel),
+  uniqueIndex("participants_election_display_label_normalized_unique").on(table.electionId, sql`lower(${table.displayLabel})`),
+]);

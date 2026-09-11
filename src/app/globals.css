@@ -12,3 +12,6 @@ button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; fo
 .suggestion-list { padding-left: 1.5rem; }
 .suggestion-list li { margin: 1rem 0; }
 .suggestion-list button { margin: .5rem .5rem 0 0; padding: .4rem .6rem; }
+.participant-list { padding-left: 1.5rem; }
+.participant-list li { margin: 1.25rem 0; }
+.participant-list button, .participant-list input, .card > button { margin: .5rem .5rem 0 0; padding: .4rem .6rem; }

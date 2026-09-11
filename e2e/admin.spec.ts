@@ -25,6 +25,57 @@ test("incorrect Administrator credentials do not authenticate", async ({ page })
   await expect(page.getByText("Fel lösenord.", { exact: true })).toBeVisible();
 });
 
+test("Administrator manages Participant Invitations and a Participant confirms their identity", async ({ page }) => {
+  const displayLabel = `Maja ${Date.now()}`;
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:3000" });
+  await page.goto("/admin/login");
+  await page.getByLabel("Lösenord").fill(process.env.ADMIN_PASSWORD ?? "test-admin-password");
+  await page.getByRole("button", { name: "Logga in" }).click();
+
+  await page.getByLabel("Deltagarnamn").fill(displayLabel);
+  await page.getByRole("button", { name: "Lägg till deltagare" }).click();
+  await expect(page.getByText("Deltagaren har lagts till.")).toBeVisible();
+  await expect(page.getByLabel(`Namn för ${displayLabel}`)).toHaveValue(displayLabel);
+  await page.getByLabel("Deltagarnamn").fill(" ");
+  await page.getByRole("button", { name: "Lägg till deltagare" }).click();
+  await expect(page.getByText("Deltagarnamnet får inte vara tomt")).toBeVisible();
+  await page.getByLabel("Deltagarnamn").fill(displayLabel);
+  await page.getByRole("button", { name: "Lägg till deltagare" }).click();
+  await expect(page.getByText("Deltagarnamnet används redan")).toBeVisible();
+  await page.getByRole("button", { name: "Kopiera inbjudan" }).click();
+  const originalInvitation = await page.evaluate(() => navigator.clipboard.readText());
+  expect(originalInvitation).toMatch(/\/vote\/[A-Za-z0-9_-]{8}$/);
+
+  const secondDisplayLabel = `Björn ${Date.now()}`;
+  await page.getByLabel("Deltagarnamn").fill(secondDisplayLabel);
+  await page.getByRole("button", { name: "Lägg till deltagare" }).click();
+  await page.getByRole("button", { name: "Kopiera alla inbjudningar" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(new RegExp(`^${displayLabel}\\n${originalInvitation}\\n\\n${secondDisplayLabel}\\nhttp://127\\.0\\.0\\.1:3000/vote/[A-Za-z0-9_-]{8}$`));
+
+  const renamedDisplayLabel = `${displayLabel} L.`;
+  await page.getByLabel(`Namn för ${displayLabel}`).fill(renamedDisplayLabel);
+  await page.getByLabel(`Namn för ${displayLabel}`).locator("..").getByRole("button", { name: "Byt namn" }).click();
+  await expect(page.getByText("Deltagaren har bytt namn.")).toBeVisible();
+
+  await page.goto(originalInvitation);
+  await expect(page.getByRole("heading", { name: `Du röstar som ${renamedDisplayLabel}` })).toBeVisible();
+
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Förnya inbjudan" }).click();
+  await page.getByRole("button", { name: "Bekräfta" }).click();
+  await expect(page.getByText("den gamla länken fungerar inte längre")).toBeVisible();
+  await page.goto(originalInvitation);
+  await expect(page.getByRole("heading", { name: "Den här länken fungerar inte" })).toBeVisible();
+
+  await page.goto("/admin");
+  await page.getByRole("button", { name: "Kopiera inbjudan" }).first().click();
+  const renewedInvitation = await page.evaluate(() => navigator.clipboard.readText());
+  await page.getByRole("button", { name: "Ta bort deltagare" }).first().click();
+  await page.getByRole("button", { name: "Bekräfta" }).click();
+  await page.goto(renewedInvitation);
+  await expect(page.getByRole("heading", { name: "Den här länken fungerar inte" })).toBeVisible();
+});
+
 test("Administrator previews, imports, and reorders the complete Suggestion set", async ({ page }) => {
   const csv = ["suggestion,motivation", ...Array.from({ length: 32 }, (_, index) => `Namn ${index + 1},Motivation ${index + 1}`)].join("\n");
   await page.goto("/admin/login");

@@ -7,7 +7,7 @@ const describeWithDatabase = process.env.TEST_POSTGRES_URL ? describe : describe
 describeWithDatabase("Postgres NameElectionStore", () => {
   afterEach(async () => {
     const { db } = await import("@/server/db/client");
-    await db.execute(sql`TRUNCATE elections`);
+    await db.execute(sql`TRUNCATE elections CASCADE`);
   });
 
   it("persists and reuses the one Draft Name Election", async () => {
@@ -30,5 +30,19 @@ describeWithDatabase("Postgres NameElectionStore", () => {
 
     const ids = (await service.listSuggestions()).map(({ id }) => id).reverse();
     await expect(service.reorderSuggestions(ids)).resolves.toSatisfy((result) => result[0]?.suggestion === "Namn 32" && result[0]?.position === 0);
+  });
+
+  it("persists Participant Invitations and invalidates superseded tokens", async () => {
+    const { postgresNameElectionStore } = await import("./postgres-store");
+    const service = createNameElectionService(postgresNameElectionStore);
+    await service.establishDraft();
+
+    const participant = await service.addParticipant("Maja");
+    expect(participant.invitationToken).toMatch(/^[A-Za-z0-9_-]{8}$/);
+    await expect(service.findParticipantByInvitation(participant.invitationToken)).resolves.toMatchObject({ displayLabel: "Maja" });
+
+    const renewed = await service.regenerateInvitation(participant.id);
+    await expect(service.findParticipantByInvitation(participant.invitationToken)).resolves.toBeNull();
+    await expect(service.findParticipantByInvitation(renewed.invitationToken)).resolves.toMatchObject({ id: participant.id });
   });
 });

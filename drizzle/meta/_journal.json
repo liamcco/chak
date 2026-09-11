@@ -2,7 +2,33 @@
   "version": "7",
   "dialect": "postgresql",
   "entries": [
-    { "idx": 0, "version": "7", "when": 0, "tag": "0000_initial_name_election", "breakpoints": true },
-    { "idx": 1, "version": "7", "when": 1778230600000, "tag": "0001_suggestions", "breakpoints": true }
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 0,
+      "tag": "0000_initial_name_election",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778230600000,
+      "tag": "0001_suggestions",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789139331842,
+      "tag": "0002_omniscient_rawhide_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789139940799,
+      "tag": "0003_sweet_flatman",
+      "breakpoints": true
+    }
   ]
 }

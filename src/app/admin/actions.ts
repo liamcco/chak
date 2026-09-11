@@ -16,3 +16,23 @@ export async function reorderSuggestions(ids: number[]) {
   await requireAdministrator();
   return nameElectionService.reorderSuggestions(ids);
 }
+
+export async function addParticipant(displayLabel: string) {
+  await requireAdministrator();
+  return nameElectionService.addParticipant(displayLabel);
+}
+
+export async function renameParticipant(id: number, displayLabel: string) {
+  await requireAdministrator();
+  return nameElectionService.renameParticipant(id, displayLabel);
+}
+
+export async function removeParticipant(id: number) {
+  await requireAdministrator();
+  return nameElectionService.removeParticipant(id);
+}
+
+export async function regenerateInvitation(id: number) {
+  await requireAdministrator();
+  return nameElectionService.regenerateInvitation(id);
+}

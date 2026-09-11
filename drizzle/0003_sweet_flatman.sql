@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "participants_election_display_label_normalized_unique" ON "participants" USING btree ("election_id",lower("display_label"));

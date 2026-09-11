@@ -1,1 +1,3 @@
-export default function PresentationPage() { return <main><p>PRESENTATION</p><h1>Körnamnsvalet</h1><p>Presentation startar när Administratören öppnar Approval Round.</p></main>; }
+import { nameElectionService } from "@/server/name-election";
+export const dynamic = "force-dynamic";
+export default async function PresentationPage() { const election = await nameElectionService.getDraft(); const suggestions = await nameElectionService.listSuggestions(); const current = suggestions.find((suggestion) => suggestion.position === (election?.presentationPosition ?? -1)); return <main className="presentation"><p>PRESENTATION</p><h1>{current?.suggestion ?? "Körnamnsvalet"}</h1><p className="motivation">{current?.motivation ?? "Presentation startar när Administratören öppnar Approval Round."}</p></main>; }

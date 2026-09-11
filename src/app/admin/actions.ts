@@ -36,3 +36,7 @@ export async function regenerateInvitation(id: number) {
   await requireAdministrator();
   return nameElectionService.regenerateInvitation(id);
 }
+
+export async function openApprovalRound() { await requireAdministrator(); return nameElectionService.openApprovalRound(); }
+export async function revealNextSuggestion() { await requireAdministrator(); return nameElectionService.revealNext(); }
+export async function movePresentation(position: number) { await requireAdministrator(); return nameElectionService.movePresentation(position); }

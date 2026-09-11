@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
-export type NameElection = { id: string; phase: string };
+export type ApprovalChoice = "yay" | "nay";
+export type NameElection = { id: string; phase: string; revealFrontier?: number; presentationPosition?: number };
 
 export type DraftNameElection = NameElection;
 
@@ -20,6 +21,9 @@ export type Participant = {
   invitationToken: string;
 };
 
+export type ApprovalState = NameElection & { revealFrontier: number; presentationPosition: number; suggestionCount: number };
+export type ApprovalSuggestion = Suggestion & { responseCount?: number; choice?: ApprovalChoice | null };
+
 export type NameElectionTransaction = {
   findElection(): Promise<DraftNameElection | null>;
   insertDraftElection(): Promise<DraftNameElection>;
@@ -32,6 +36,11 @@ export type NameElectionTransaction = {
   removeParticipant(id: number): Promise<boolean>;
   regenerateInvitation(id: number, invitationToken: string): Promise<Participant | null>;
   findParticipantByInvitation(invitationToken: string): Promise<Participant | null>;
+  openApprovalRound?(): Promise<ApprovalState>;
+  revealNext?(): Promise<ApprovalState>;
+  movePresentation?(position: number): Promise<ApprovalState>;
+  listApprovalChoices?(participantId?: number): Promise<{ suggestionId: number; participantId: number; choice: ApprovalChoice }[]>;
+  saveApprovalChoice?(participantId: number, suggestionId: number, choice: ApprovalChoice): Promise<void>;
 };
 
 export type NameElectionStore = {
@@ -50,6 +59,11 @@ export type NameElectionService = {
   removeParticipant(id: number): Promise<void>;
   regenerateInvitation(id: number): Promise<Participant>;
   findParticipantByInvitation(invitationToken: string): Promise<Participant | null>;
+  openApprovalRound(): Promise<ApprovalState>;
+  revealNext(): Promise<ApprovalState>;
+  movePresentation(position: number): Promise<ApprovalState>;
+  getApprovalForInvitation(invitationToken: string): Promise<{ state: ApprovalState; participant: Participant; suggestions: ApprovalSuggestion[] } | null>;
+  saveApprovalChoice(invitationToken: string, suggestionId: number, choice: ApprovalChoice): Promise<void>;
 };
 
 const suggestionCount = 32;
@@ -105,6 +119,18 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
       }
     }
     throw new Error("Kunde inte skapa en unik inbjudningslänk");
+  }
+
+  async function approvalState(transaction: NameElectionTransaction): Promise<ApprovalState> {
+    const election = await transaction.findElection();
+    if (!election) throw new Error("Namnvalet finns inte");
+    const all = await transaction.listSuggestions();
+    return { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier ?? -1, presentationPosition: election.presentationPosition ?? -1, suggestionCount: all.length };
+  }
+
+  function requireApprovalMethods(transaction: NameElectionTransaction) {
+    if (!transaction.openApprovalRound || !transaction.revealNext || !transaction.movePresentation || !transaction.listApprovalChoices || !transaction.saveApprovalChoice) throw new Error("Approval Round is not available");
+    return transaction;
   }
 
   return {
@@ -171,5 +197,45 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
       return participant;
     }),
     findParticipantByInvitation: (invitationToken) => store.transaction((transaction) => transaction.findParticipantByInvitation(invitationToken)),
+    openApprovalRound: () => store.transaction(async (transaction) => {
+      const election = await transaction.findElection();
+      if (!election) throw new Error("Namnvalet finns inte");
+      if (election.phase === "approval-open" || election.phase === "approval-closed") return approvalState(transaction);
+      if (election.phase !== "draft") throw new Error("Approval Round kan bara öppnas från Draft");
+      if (!(await transaction.listParticipants()).length) throw new Error("Minst en Participant krävs");
+      if ((await transaction.listSuggestions()).length !== suggestionCount) throw new Error("Alla 32 Suggestions krävs");
+      const t = requireApprovalMethods(transaction);
+      return t.openApprovalRound!();
+    }),
+    revealNext: () => store.transaction(async (transaction) => {
+      const election = await transaction.findElection();
+      if (!election || election.phase !== "approval-open") throw new Error("Suggestions kan bara avslöjas under Approval Round");
+      return requireApprovalMethods(transaction).revealNext!();
+    }),
+    movePresentation: (position) => store.transaction(async (transaction) => {
+      const state = await approvalState(transaction);
+      if (state.phase !== "approval-open") throw new Error("Presentation är inte öppen");
+      if (!Number.isInteger(position) || position < 0 || position > state.revealFrontier) throw new Error("Presentation Position är ogiltig");
+      return requireApprovalMethods(transaction).movePresentation!(position);
+    }),
+    getApprovalForInvitation: (invitationToken) => store.transaction(async (transaction) => {
+      const participant = await transaction.findParticipantByInvitation(invitationToken);
+      if (!participant) return null;
+      const state = await approvalState(transaction);
+      const choices = transaction.listApprovalChoices ? await transaction.listApprovalChoices(participant.id) : [];
+      const choiceBySuggestion = new Map(choices.map((choice) => [choice.suggestionId, choice.choice]));
+      const suggestions = (await transaction.listSuggestions()).filter((suggestion) => suggestion.position <= state.revealFrontier).map((suggestion) => ({ ...suggestion, choice: choiceBySuggestion.get(suggestion.id) ?? null }));
+      return { state, participant, suggestions };
+    }),
+    saveApprovalChoice: (invitationToken, suggestionId, choice) => store.transaction(async (transaction) => {
+      if (choice !== "yay" && choice !== "nay") throw new Error("Valet måste vara Ja eller Nej");
+      const participant = await transaction.findParticipantByInvitation(invitationToken);
+      if (!participant) throw new Error("Ogiltig inbjudan");
+      const state = await approvalState(transaction);
+      if (state.phase !== "approval-open") throw new Error("Approval Round är inte öppen");
+      const suggestion = (await transaction.listSuggestions()).find((candidate) => candidate.id === suggestionId);
+      if (!suggestion || suggestion.position > state.revealFrontier) throw new Error("Suggestion är inte avslöjad");
+      return requireApprovalMethods(transaction).saveApprovalChoice!(participant.id, suggestionId, choice);
+    }),
   };
 }

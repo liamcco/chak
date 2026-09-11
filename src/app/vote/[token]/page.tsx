@@ -1,6 +1,7 @@
 import { nameElectionService } from "@/server/name-election";
 import { ApprovalBallot } from "./ballot";
 import { FinalBallot } from "./final-ballot";
+import { RunoffBallot } from "./runoff-ballot";
 export const dynamic = "force-dynamic";
 
 export default async function InvitationPage({ params }: { params: Promise<{ token: string }> }) {
@@ -13,6 +14,10 @@ export default async function InvitationPage({ params }: { params: Promise<{ tok
   if (["final-open", "final-closed"].includes(approval.state.phase)) {
     const final = await nameElectionService.getFinalVoteForInvitation(token);
     if (final) return <FinalBallot token={token} participant={final.participant.displayLabel} initial={final.ballot} />;
+  }
+  if (approval.state.phase === "runoff-open") {
+    const runoff = await nameElectionService.getRunoffForInvitation(token);
+    if (runoff) return <RunoffBallot token={token} participant={runoff.participant.displayLabel} initial={runoff.ballot} />;
   }
   return <ApprovalBallot token={token} participant={approval.participant.displayLabel} initial={approval} />;
 }

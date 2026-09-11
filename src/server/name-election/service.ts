@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 export type ApprovalChoice = "yay" | "nay";
-export type NameElection = { id: string; phase: string; revealFrontier?: number; presentationPosition?: number; finalistIds?: number[]; voteTokenAllowance?: number; winnerSuggestionId?: number | null };
+export type NameElection = { id: string; phase: string; revealFrontier?: number; presentationPosition?: number; finalistIds?: number[]; voteTokenAllowance?: number; winnerSuggestionId?: number | null; winnerSuggestionIds?: number[] | null };
 
 export type DraftNameElection = NameElection;
 
@@ -37,12 +37,15 @@ export type ApprovalOverview = ApprovalState & {
   participants: ApprovalParticipantProgress[];
 };
 export type ApprovalResult = Suggestion & { yayCount: number; nayCount: number; unansweredCount: number; approvalScore: number };
-export type FinalistPreparation = { finalistIds: number[]; voteTokenAllowance: number; winnerSuggestionId?: number | null };
+export type FinalistPreparation = { finalistIds: number[]; voteTokenAllowance: number; winnerSuggestionId?: number | null; winnerSuggestionIds?: number[] | null };
 export type FinalAllocation = { suggestionId: number; voteTokens: number };
 export type FinalBallot = NameElection & { finalistIds: number[]; voteTokenAllowance: number; finalists: Suggestion[]; allocations: FinalAllocation[]; remainingVoteTokens: number; complete: boolean };
 export type FinalParticipantProgress = { participantId: number; displayLabel: string; lastActivityAt: Date | null; complete: boolean };
 export type FinalVoteOverview = NameElection & { finalistIds: number[]; voteTokenAllowance: number; completedCount: number; participants: FinalParticipantProgress[] };
 export type FinalVoteOutcome = { status: "unique" | "tied" };
+export type RunoffRound = { id: number; roundNumber: number; finalistIds: number[]; status: "open" | "closed"; winnerIds?: number[] | null };
+export type RunoffBallot = { round: RunoffRound; finalists: Suggestion[]; choice: number | null };
+export type RunoffOverview = RunoffRound & { completedCount: number; participantCount: number; incompleteParticipantIds: number[]; finalists: Suggestion[]; participants: { participantId: number; displayLabel: string; complete: boolean }[] };
 
 export type NameElectionTransaction = {
   findElection(): Promise<DraftNameElection | null>;
@@ -67,7 +70,12 @@ export type NameElectionTransaction = {
   saveFinalAllocation?(participantId: number, suggestionId: number, voteTokens: number): Promise<void>;
   listFinalAllocations?(participantId?: number): Promise<{ participantId: number; suggestionId: number; voteTokens: number }[]>;
   openFinalVote?(): Promise<NameElection>;
-  closeFinalVote?(): Promise<NameElection>;
+  closeFinalVote?(finalistIds?: number[]): Promise<NameElection>;
+  createRunoffRound?(finalistIds: number[], roundNumber: number): Promise<RunoffRound>;
+  findOpenRunoff?(): Promise<RunoffRound | null>;
+  listRunoffChoices?(roundId?: number): Promise<{ roundId: number; participantId: number; suggestionId: number }[]>;
+  saveRunoffChoice?(roundId: number, participantId: number, suggestionId: number): Promise<void>;
+  closeRunoff?(roundId: number, winnerIds: number[]): Promise<RunoffRound>;
 };
 
 export type NameElectionStore = {
@@ -101,6 +109,12 @@ export type NameElectionService = {
   getFinalVoteOverview(): Promise<FinalVoteOverview>;
   saveFinalAllocation(invitationToken: string, suggestionId: number, voteTokens: number): Promise<void>;
   closeFinalVote(incompleteParticipantIds?: number[]): Promise<FinalVoteOutcome>;
+  getRunoffForInvitation(invitationToken: string): Promise<{ participant: Participant; ballot: RunoffBallot } | null>;
+  getRunoffOverview(): Promise<RunoffOverview | null>;
+  openRunoff(): Promise<RunoffRound>;
+  saveRunoffChoice(invitationToken: string, suggestionId: number): Promise<void>;
+  closeRunoff(incompleteParticipantIds?: number[]): Promise<{ status: "unique" | "tied"; winnerIds: number[] }>;
+  declareJointWinners(): Promise<FinalistPreparation>;
 };
 
 const suggestionCount = 32;
@@ -402,8 +416,64 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
       const high = Math.max(...(election.finalistIds ?? []).map((id) => totals.get(id) ?? 0));
       const leaders = (election.finalistIds ?? []).filter((id) => (totals.get(id) ?? 0) === high);
       if (!transaction.closeFinalVote) throw new Error("Final Vote is not available");
-      await transaction.closeFinalVote();
+      await transaction.closeFinalVote(leaders);
       return { status: leaders.length === 1 ? "unique" : "tied" };
+    }),
+    getRunoffForInvitation: (invitationToken) => store.transaction(async (transaction) => {
+      const participant = await transaction.findParticipantByInvitation(invitationToken);
+      const round = transaction.findOpenRunoff ? await transaction.findOpenRunoff() : null;
+      if (!participant || !round || round.status !== "open") return null;
+      const suggestions = await transaction.listSuggestions();
+      const choices = transaction.listRunoffChoices ? await transaction.listRunoffChoices(round.id) : [];
+      return { participant, ballot: { round, finalists: suggestions.filter((s) => round.finalistIds.includes(s.id)), choice: choices.find((c) => c.participantId === participant.id)?.suggestionId ?? null } };
+    }),
+    getRunoffOverview: () => store.transaction(async (transaction) => {
+      const round = transaction.findOpenRunoff ? await transaction.findOpenRunoff() : null;
+      if (!round) return null;
+      const participants = await transaction.listParticipants();
+      const choices = transaction.listRunoffChoices ? await transaction.listRunoffChoices(round.id) : [];
+      return { ...round, completedCount: choices.length, participantCount: participants.length, incompleteParticipantIds: participants.filter((p) => !choices.some((c) => c.participantId === p.id)).map((p) => p.id), finalists: (await transaction.listSuggestions()).filter((s) => round.finalistIds.includes(s.id)), participants: participants.map((p) => ({ participantId: p.id, displayLabel: p.displayLabel, complete: choices.some((c) => c.participantId === p.id) })) };
+    }),
+    openRunoff: () => store.transaction(async (transaction) => {
+      const election = await transaction.findElection();
+      if (!election || (election.phase !== "final-closed" && election.phase !== "runoff-closed")) throw new Error("Runoff kan bara öppnas efter en stängd tied vote");
+      const previous = transaction.findOpenRunoff ? await transaction.findOpenRunoff() : null;
+      const finalistIds = election.phase === "final-closed" ? (election.finalistIds ?? []) : (previous?.winnerIds ?? []);
+      if (finalistIds.length < 2) throw new Error("Minst två tied leaders krävs för en Runoff");
+      if (!transaction.createRunoffRound) throw new Error("Runoff is not available");
+      return transaction.createRunoffRound(finalistIds, (previous?.roundNumber ?? 0) + 1);
+    }),
+    saveRunoffChoice: (invitationToken, suggestionId) => store.transaction(async (transaction) => {
+      const participant = await transaction.findParticipantByInvitation(invitationToken);
+      const round = transaction.findOpenRunoff ? await transaction.findOpenRunoff() : null;
+      if (!participant) throw new Error("Ogiltig inbjudan");
+      if (!round || round.status !== "open") throw new Error("Runoff är inte öppen");
+      if (!round.finalistIds.includes(suggestionId)) throw new Error("Suggestion är inte en Runoff Finalist");
+      if (!transaction.saveRunoffChoice) throw new Error("Runoff is not available");
+      return transaction.saveRunoffChoice(round.id, participant.id, suggestionId);
+    }),
+    closeRunoff: (confirmedIds = []) => store.transaction(async (transaction) => {
+      const round = transaction.findOpenRunoff ? await transaction.findOpenRunoff() : null;
+      if (!round || round.status !== "open") throw new Error("Runoff kan inte stängas nu");
+      const roster = await transaction.listParticipants();
+      const choices = transaction.listRunoffChoices ? await transaction.listRunoffChoices(round.id) : [];
+      const incomplete = roster.filter((p) => !choices.some((c) => c.participantId === p.id));
+      if (incomplete.map((p) => p.id).sort((a, b) => a - b).join(",") !== [...confirmedIds].sort((a, b) => a - b).join(",")) throw new Error(`Bekräfta ofullständiga Ballots: ${incomplete.map((p) => p.displayLabel).join(", ") || "inga"}`);
+      const counts = new Map<number, number>();
+      for (const choice of choices) counts.set(choice.suggestionId, (counts.get(choice.suggestionId) ?? 0) + 1);
+      const high = Math.max(...round.finalistIds.map((id) => counts.get(id) ?? 0));
+      const winners = round.finalistIds.filter((id) => (counts.get(id) ?? 0) === high);
+      if (!transaction.closeRunoff) throw new Error("Runoff is not available");
+      await transaction.closeRunoff(round.id, winners);
+      return { status: winners.length === 1 ? "unique" as const : "tied" as const, winnerIds: winners };
+    }),
+    declareJointWinners: () => store.transaction(async (transaction) => {
+      const round = transaction.findOpenRunoff ? await transaction.findOpenRunoff() : null;
+      if (!round || round.status !== "closed" || !round.winnerIds?.length) throw new Error("Ingen tied Runoff kan frysas som joint Winners");
+      if (round.roundNumber < 2 || round.winnerIds.length < 2) throw new Error("Joint Winners kräver en andra tied Runoff");
+      if (!transaction.saveFinalistPreparation) throw new Error("Runoff is not available");
+      const saved = await transaction.saveFinalistPreparation({ finalistIds: round.winnerIds, voteTokenAllowance: 0, winnerSuggestionId: round.winnerIds[0] });
+      return { finalistIds: saved.finalistIds ?? [], voteTokenAllowance: saved.voteTokenAllowance ?? 0, winnerSuggestionId: saved.winnerSuggestionId, winnerSuggestionIds: round.winnerIds };
     }),
   };
 }

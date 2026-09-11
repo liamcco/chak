@@ -45,3 +45,6 @@ export async function prepareFinalVote(suggestionIds: number[], voteTokenAllowan
 export async function declareWinner(suggestionId: number) { await requireAdministrator(); return nameElectionService.declareWinner(suggestionId); }
 export async function openFinalVote() { await requireAdministrator(); return nameElectionService.openFinalVote(); }
 export async function closeFinalVote(incompleteParticipantIds: number[] = []) { await requireAdministrator(); return nameElectionService.closeFinalVote(incompleteParticipantIds); }
+export async function openRunoff() { await requireAdministrator(); return nameElectionService.openRunoff(); }
+export async function closeRunoff(incompleteParticipantIds: number[] = []) { await requireAdministrator(); return nameElectionService.closeRunoff(incompleteParticipantIds); }
+export async function declareJointWinners() { await requireAdministrator(); return nameElectionService.declareJointWinners(); }

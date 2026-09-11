@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, pgEnum, pgTable, timestamp, uuid, integer, serial, text, unique, uniqueIndex } from "drizzle-orm/pg-core";
 
-export const electionPhase = pgEnum("election_phase", ["draft", "approval-open", "approval-closed", "final-prepared", "final-open", "final-closed", "complete"]);
+export const electionPhase = pgEnum("election_phase", ["draft", "approval-open", "approval-closed", "final-prepared", "final-open", "final-closed", "runoff-open", "runoff-closed", "complete"]);
 export const approvalChoice = pgEnum("approval_choice", ["yay", "nay"]);
 
 export const singletonElectionId = "00000000-0000-0000-0000-000000000001";
@@ -14,6 +14,7 @@ export const elections = pgTable("elections", {
   finalistIds: integer("finalist_ids").array().notNull().default(sql`'{}'::integer[]`),
   voteTokenAllowance: integer("vote_token_allowance").notNull().default(3),
   winnerSuggestionId: integer("winner_suggestion_id"),
+  winnerSuggestionIds: integer("winner_suggestion_ids").array(),
   stateVersion: integer("state_version").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -58,3 +59,20 @@ export const finalVotes = pgTable("final_votes", {
   unique("final_votes_participant_suggestion_unique").on(table.participantId, table.suggestionId),
   check("final_votes_non_negative", sql`${table.voteTokens} >= 0`),
 ]);
+
+export const runoffRounds = pgTable("runoff_rounds", {
+  id: serial("id").primaryKey(),
+  electionId: uuid("election_id").notNull().references(() => elections.id, { onDelete: "cascade" }),
+  roundNumber: integer("round_number").notNull(),
+  finalistIds: integer("finalist_ids").array().notNull(),
+  status: text("status").notNull().default("open"),
+  winnerIds: integer("winner_ids").array(),
+}, (table) => [unique("runoff_round_election_number_unique").on(table.electionId, table.roundNumber)]);
+
+export const runoffChoices = pgTable("runoff_choices", {
+  id: serial("id").primaryKey(),
+  roundId: integer("round_id").notNull().references(() => runoffRounds.id, { onDelete: "cascade" }),
+  participantId: integer("participant_id").notNull().references(() => participants.id, { onDelete: "cascade" }),
+  suggestionId: integer("suggestion_id").notNull().references(() => suggestions.id, { onDelete: "cascade" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [unique("runoff_choices_participant_round_unique").on(table.roundId, table.participantId)]);

@@ -57,6 +57,13 @@
       "when": 1789143000000,
       "tag": "0007_final_vote",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789144000000,
+      "tag": "0008_runoffs",
+      "breakpoints": true
     }
   ]
 }

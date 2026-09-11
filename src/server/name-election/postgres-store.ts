@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { approvalChoices, elections, finalVotes, participants, singletonElectionId, suggestions } from "@/server/db/schema";
+import { approvalChoices, elections, finalVotes, participants, runoffChoices, runoffRounds, singletonElectionId, suggestions } from "@/server/db/schema";
 import type { ApprovalChoice, ApprovalState, FinalistPreparation, NameElectionStore } from "./service";
 
 export const postgresNameElectionStore: NameElectionStore = {
@@ -26,7 +26,7 @@ export const postgresNameElectionStore: NameElectionStore = {
     return operation({
     findElection: async () => {
       const election = await transaction.query.elections.findFirst();
-      return election ? { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId } : null;
+      return election ? { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds } : null;
     },
     insertDraftElection: async () => {
       const [election] = await transaction.insert(elections).values({ id: singletonElectionId, phase: "draft" }).onConflictDoNothing().returning();
@@ -35,7 +35,7 @@ export const postgresNameElectionStore: NameElectionStore = {
         if (!existing) throw new Error("The Draft Name Election could not be established");
         return { id: existing.id, phase: existing.phase };
       }
-      return { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId };
+      return { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId, winnerSuggestionIds: election.winnerSuggestionIds };
     },
     listSuggestions,
     replaceSuggestions: async (nextSuggestions) => {
@@ -95,9 +95,9 @@ export const postgresNameElectionStore: NameElectionStore = {
       return state();
     },
     saveFinalistPreparation: async (preparation: FinalistPreparation) => {
-      const [updated] = await transaction.update(elections).set({ phase: preparation.winnerSuggestionId ? "complete" : "final-prepared", finalistIds: preparation.finalistIds, voteTokenAllowance: preparation.voteTokenAllowance, winnerSuggestionId: preparation.winnerSuggestionId ?? null, stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
+      const [updated] = await transaction.update(elections).set({ phase: preparation.winnerSuggestionId ? "complete" : "final-prepared", finalistIds: preparation.finalistIds, voteTokenAllowance: preparation.voteTokenAllowance, winnerSuggestionId: preparation.winnerSuggestionId ?? null, winnerSuggestionIds: preparation.winnerSuggestionId ? preparation.finalistIds : null, stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
       if (!updated) throw new Error("Finalistkonfigurationen kunde inte sparas");
-      return { id: updated.id, phase: updated.phase, revealFrontier: updated.revealFrontier, presentationPosition: updated.presentationPosition, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId };
+      return { id: updated.id, phase: updated.phase, revealFrontier: updated.revealFrontier, presentationPosition: updated.presentationPosition, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId, winnerSuggestionIds: updated.winnerSuggestionIds };
     },
     saveFinalAllocation: async (participantId, suggestionId, voteTokens) => {
       await transaction.insert(finalVotes).values({ electionId: singletonElectionId, participantId, suggestionId, voteTokens, updatedAt: new Date() }).onConflictDoUpdate({ target: [finalVotes.participantId, finalVotes.suggestionId], set: { voteTokens, updatedAt: new Date() } });
@@ -109,10 +109,31 @@ export const postgresNameElectionStore: NameElectionStore = {
       if (!updated) throw new Error("Final Vote kunde inte öppnas");
       return { id: updated.id, phase: updated.phase, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId };
     },
-    closeFinalVote: async () => {
-      const [updated] = await transaction.update(elections).set({ phase: "final-closed", stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
+    closeFinalVote: async (finalistIds) => {
+      const [updated] = await transaction.update(elections).set({ phase: "final-closed", finalistIds, stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
       if (!updated) throw new Error("Final Vote kunde inte stängas");
-      return { id: updated.id, phase: updated.phase, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId };
+      return { id: updated.id, phase: updated.phase, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId, winnerSuggestionIds: updated.winnerSuggestionIds };
+    },
+    createRunoffRound: async (finalistIds, roundNumber) => {
+      const [round] = await transaction.insert(runoffRounds).values({ electionId: singletonElectionId, finalistIds, roundNumber, status: "open" }).returning();
+      if (!round) throw new Error("Runoff kunde inte öppnas");
+      await transaction.update(elections).set({ phase: "runoff-open", stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId));
+      return { id: round.id, roundNumber: round.roundNumber, finalistIds: round.finalistIds, status: "open" as const, winnerIds: round.winnerIds };
+    },
+    findOpenRunoff: async () => {
+      const round = await transaction.query.runoffRounds.findFirst({ orderBy: (table, { desc }) => [desc(table.roundNumber)] });
+      return round ? { id: round.id, roundNumber: round.roundNumber, finalistIds: round.finalistIds, status: round.status as "open" | "closed", winnerIds: round.winnerIds } : null;
+    },
+    listRunoffChoices: async (roundId) => transaction.select({ roundId: runoffChoices.roundId, participantId: runoffChoices.participantId, suggestionId: runoffChoices.suggestionId }).from(runoffChoices).where(roundId === undefined ? sql`${runoffChoices.roundId} IN (SELECT id FROM runoff_rounds WHERE election_id = ${singletonElectionId}::uuid)` : eq(runoffChoices.roundId, roundId)),
+    saveRunoffChoice: async (roundId, participantId, suggestionId) => {
+      await transaction.insert(runoffChoices).values({ roundId, participantId, suggestionId, updatedAt: new Date() }).onConflictDoUpdate({ target: [runoffChoices.roundId, runoffChoices.participantId], set: { suggestionId, updatedAt: new Date() } });
+      await transaction.update(participants).set({ lastActivityAt: new Date() }).where(eq(participants.id, participantId));
+    },
+    closeRunoff: async (roundId, winnerIds) => {
+      const [round] = await transaction.update(runoffRounds).set({ status: "closed", winnerIds }).where(eq(runoffRounds.id, roundId)).returning();
+      if (!round) throw new Error("Runoff kunde inte stängas");
+      await transaction.update(elections).set({ phase: winnerIds.length === 1 ? "complete" : "runoff-closed", winnerSuggestionId: winnerIds.length === 1 ? winnerIds[0] : null, winnerSuggestionIds: winnerIds.length === 1 ? winnerIds : null, stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId));
+      return { id: round.id, roundNumber: round.roundNumber, finalistIds: round.finalistIds, status: "closed" as const, winnerIds: round.winnerIds };
     },
     });
   }),

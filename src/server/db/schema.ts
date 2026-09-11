@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, pgEnum, pgTable, timestamp, uuid, integer, serial, text, unique, uniqueIndex } from "drizzle-orm/pg-core";
 
-export const electionPhase = pgEnum("election_phase", ["draft", "approval-open", "approval-closed", "final-prepared", "complete"]);
+export const electionPhase = pgEnum("election_phase", ["draft", "approval-open", "approval-closed", "final-prepared", "final-open", "final-closed", "complete"]);
 export const approvalChoice = pgEnum("approval_choice", ["yay", "nay"]);
 
 export const singletonElectionId = "00000000-0000-0000-0000-000000000001";
@@ -46,3 +46,15 @@ export const approvalChoices = pgTable("approval_choices", {
   choice: approvalChoice("choice").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [unique("approval_choices_participant_suggestion_unique").on(table.participantId, table.suggestionId)]);
+
+export const finalVotes = pgTable("final_votes", {
+  id: serial("id").primaryKey(),
+  electionId: uuid("election_id").notNull().references(() => elections.id, { onDelete: "cascade" }),
+  participantId: integer("participant_id").notNull().references(() => participants.id, { onDelete: "cascade" }),
+  suggestionId: integer("suggestion_id").notNull().references(() => suggestions.id, { onDelete: "cascade" }),
+  voteTokens: integer("vote_tokens").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  unique("final_votes_participant_suggestion_unique").on(table.participantId, table.suggestionId),
+  check("final_votes_non_negative", sql`${table.voteTokens} >= 0`),
+]);

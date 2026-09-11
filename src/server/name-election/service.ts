@@ -38,6 +38,11 @@ export type ApprovalOverview = ApprovalState & {
 };
 export type ApprovalResult = Suggestion & { yayCount: number; nayCount: number; unansweredCount: number; approvalScore: number };
 export type FinalistPreparation = { finalistIds: number[]; voteTokenAllowance: number; winnerSuggestionId?: number | null };
+export type FinalAllocation = { suggestionId: number; voteTokens: number };
+export type FinalBallot = NameElection & { finalistIds: number[]; voteTokenAllowance: number; finalists: Suggestion[]; allocations: FinalAllocation[]; remainingVoteTokens: number; complete: boolean };
+export type FinalParticipantProgress = { participantId: number; displayLabel: string; lastActivityAt: Date | null; complete: boolean };
+export type FinalVoteOverview = NameElection & { finalistIds: number[]; voteTokenAllowance: number; completedCount: number; participants: FinalParticipantProgress[] };
+export type FinalVoteOutcome = { status: "unique" | "tied" };
 
 export type NameElectionTransaction = {
   findElection(): Promise<DraftNameElection | null>;
@@ -59,6 +64,10 @@ export type NameElectionTransaction = {
   getApprovalOverview?(): Promise<ApprovalOverview>;
   closeApprovalRound?(): Promise<ApprovalState>;
   saveFinalistPreparation?(preparation: FinalistPreparation): Promise<NameElection>;
+  saveFinalAllocation?(participantId: number, suggestionId: number, voteTokens: number): Promise<void>;
+  listFinalAllocations?(participantId?: number): Promise<{ participantId: number; suggestionId: number; voteTokens: number }[]>;
+  openFinalVote?(): Promise<NameElection>;
+  closeFinalVote?(): Promise<NameElection>;
 };
 
 export type NameElectionStore = {
@@ -87,6 +96,11 @@ export type NameElectionService = {
   prepareFinalVote(suggestionIds: number[], voteTokenAllowance?: number): Promise<FinalistPreparation>;
   declareWinner(suggestionId: number): Promise<FinalistPreparation>;
   saveApprovalChoice(invitationToken: string, suggestionId: number, choice: ApprovalChoice): Promise<void>;
+  openFinalVote(): Promise<NameElection>;
+  getFinalVoteForInvitation(invitationToken: string): Promise<{ participant: Participant; ballot: FinalBallot } | null>;
+  getFinalVoteOverview(): Promise<FinalVoteOverview>;
+  saveFinalAllocation(invitationToken: string, suggestionId: number, voteTokens: number): Promise<void>;
+  closeFinalVote(incompleteParticipantIds?: number[]): Promise<FinalVoteOutcome>;
 };
 
 const suggestionCount = 32;
@@ -332,6 +346,64 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
       const suggestion = (await transaction.listSuggestions()).find((candidate) => candidate.id === suggestionId);
       if (!suggestion || suggestion.position > state.revealFrontier) throw new Error("Suggestion är inte avslöjad");
       return requireApprovalMethods(transaction).saveApprovalChoice!(participant.id, suggestionId, choice);
+    }),
+    openFinalVote: () => store.transaction(async (transaction) => {
+      const election = await transaction.findElection();
+      if (!election || election.phase !== "final-prepared") throw new Error("Final Vote kan bara öppnas efter förberedelse");
+      if (!transaction.openFinalVote) throw new Error("Final Vote is not available");
+      return transaction.openFinalVote();
+    }),
+    getFinalVoteForInvitation: (invitationToken) => store.transaction(async (transaction) => {
+      const participant = await transaction.findParticipantByInvitation(invitationToken);
+      if (!participant) return null;
+      const election = await transaction.findElection();
+      if (!election || election.phase !== "final-open") throw new Error("Final Vote är inte öppen");
+      const finalistIds = election.finalistIds ?? [];
+      const suggestions = await transaction.listSuggestions();
+      const allocations = transaction.listFinalAllocations ? await transaction.listFinalAllocations(participant.id) : [];
+      const ballotAllocations = finalistIds.map((suggestionId) => ({ suggestionId, voteTokens: allocations.find((a) => a.suggestionId === suggestionId)?.voteTokens ?? 0 }));
+      const used = ballotAllocations.reduce((sum, allocation) => sum + allocation.voteTokens, 0);
+      return { participant, ballot: { ...election, finalistIds, voteTokenAllowance: election.voteTokenAllowance ?? 0, finalists: suggestions.filter((suggestion) => finalistIds.includes(suggestion.id)), allocations: ballotAllocations, remainingVoteTokens: (election.voteTokenAllowance ?? 0) - used, complete: used === (election.voteTokenAllowance ?? 0) } };
+    }),
+    getFinalVoteOverview: () => store.transaction(async (transaction) => {
+      const election = await transaction.findElection();
+      if (!election) throw new Error("Namnvalet finns inte");
+      const roster = await transaction.listParticipants();
+      const allocations = transaction.listFinalAllocations ? await transaction.listFinalAllocations() : [];
+      const allowance = election.voteTokenAllowance ?? 0;
+      const complete = (participantId: number) => allocations.filter((a) => a.participantId === participantId).reduce((sum, a) => sum + a.voteTokens, 0) === allowance;
+      return { ...election, finalistIds: election.finalistIds ?? [], voteTokenAllowance: allowance, completedCount: roster.filter((p) => complete(p.id)).length, participants: roster.map((p) => ({ participantId: p.id, displayLabel: p.displayLabel, lastActivityAt: p.lastActivityAt ?? null, complete: complete(p.id) })) };
+    }),
+    saveFinalAllocation: (invitationToken, suggestionId, voteTokens) => store.transaction(async (transaction) => {
+      const participant = await transaction.findParticipantByInvitation(invitationToken);
+      if (!participant) throw new Error("Ogiltig inbjudan");
+      const election = await transaction.findElection();
+      if (!election || election.phase !== "final-open") throw new Error("Final Vote är inte öppen");
+      const finalistIds = election.finalistIds ?? [];
+      if (!finalistIds.includes(suggestionId)) throw new Error("Suggestion är inte en Finalist");
+      if (!Number.isInteger(voteTokens) || voteTokens < 0) throw new Error("Vote Tokens måste vara ett heltal som inte är negativt");
+      const current = transaction.listFinalAllocations ? await transaction.listFinalAllocations(participant.id) : [];
+      const used = current.reduce((sum, a) => sum + (a.suggestionId === suggestionId ? 0 : a.voteTokens), 0);
+      if (used + voteTokens > (election.voteTokenAllowance ?? 0)) throw new Error("För många Vote Tokens");
+      if (!transaction.saveFinalAllocation) throw new Error("Final Vote is not available");
+      return transaction.saveFinalAllocation(participant.id, suggestionId, voteTokens);
+    }),
+    closeFinalVote: (confirmedIds = []) => store.transaction(async (transaction) => {
+      const election = await transaction.findElection();
+      if (!election || election.phase !== "final-open") throw new Error("Final Vote kan inte stängas nu");
+      const roster = await transaction.listParticipants();
+      const allocations = transaction.listFinalAllocations ? await transaction.listFinalAllocations() : [];
+      const allowance = election.voteTokenAllowance ?? 0;
+      const completeParticipants = roster.filter((p) => allocations.filter((a) => a.participantId === p.id).reduce((sum, a) => sum + a.voteTokens, 0) === allowance);
+      const incomplete = roster.filter((p) => !completeParticipants.includes(p));
+      if (incomplete.map((p) => p.id).sort((a, b) => a - b).join(",") !== [...confirmedIds].sort((a, b) => a - b).join(",")) throw new Error(`Bekräfta ofullständiga Ballots: ${incomplete.map((p) => p.displayLabel).join(", ") || "inga"}`);
+      const totals = new Map<number, number>();
+      for (const allocation of allocations.filter((a) => completeParticipants.some((p) => p.id === a.participantId))) totals.set(allocation.suggestionId, (totals.get(allocation.suggestionId) ?? 0) + allocation.voteTokens);
+      const high = Math.max(...(election.finalistIds ?? []).map((id) => totals.get(id) ?? 0));
+      const leaders = (election.finalistIds ?? []).filter((id) => (totals.get(id) ?? 0) === high);
+      if (!transaction.closeFinalVote) throw new Error("Final Vote is not available");
+      await transaction.closeFinalVote();
+      return { status: leaders.length === 1 ? "unique" : "tied" };
     }),
   };
 }

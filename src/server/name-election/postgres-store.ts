@@ -1,6 +1,6 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
-import { approvalChoices, elections, participants, singletonElectionId, suggestions } from "@/server/db/schema";
+import { approvalChoices, elections, finalVotes, participants, singletonElectionId, suggestions } from "@/server/db/schema";
 import type { ApprovalChoice, ApprovalState, FinalistPreparation, NameElectionStore } from "./service";
 
 export const postgresNameElectionStore: NameElectionStore = {
@@ -98,6 +98,21 @@ export const postgresNameElectionStore: NameElectionStore = {
       const [updated] = await transaction.update(elections).set({ phase: preparation.winnerSuggestionId ? "complete" : "final-prepared", finalistIds: preparation.finalistIds, voteTokenAllowance: preparation.voteTokenAllowance, winnerSuggestionId: preparation.winnerSuggestionId ?? null, stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
       if (!updated) throw new Error("Finalistkonfigurationen kunde inte sparas");
       return { id: updated.id, phase: updated.phase, revealFrontier: updated.revealFrontier, presentationPosition: updated.presentationPosition, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId };
+    },
+    saveFinalAllocation: async (participantId, suggestionId, voteTokens) => {
+      await transaction.insert(finalVotes).values({ electionId: singletonElectionId, participantId, suggestionId, voteTokens, updatedAt: new Date() }).onConflictDoUpdate({ target: [finalVotes.participantId, finalVotes.suggestionId], set: { voteTokens, updatedAt: new Date() } });
+      await transaction.update(participants).set({ lastActivityAt: new Date() }).where(eq(participants.id, participantId));
+    },
+    listFinalAllocations: async (participantId) => transaction.select({ participantId: finalVotes.participantId, suggestionId: finalVotes.suggestionId, voteTokens: finalVotes.voteTokens }).from(finalVotes).where(participantId === undefined ? eq(finalVotes.electionId, singletonElectionId) : sql`${finalVotes.electionId} = ${singletonElectionId}::uuid AND ${finalVotes.participantId} = ${participantId}`),
+    openFinalVote: async () => {
+      const [updated] = await transaction.update(elections).set({ phase: "final-open", stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
+      if (!updated) throw new Error("Final Vote kunde inte öppnas");
+      return { id: updated.id, phase: updated.phase, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId };
+    },
+    closeFinalVote: async () => {
+      const [updated] = await transaction.update(elections).set({ phase: "final-closed", stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
+      if (!updated) throw new Error("Final Vote kunde inte stängas");
+      return { id: updated.id, phase: updated.phase, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId };
     },
     });
   }),

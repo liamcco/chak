@@ -24,5 +24,12 @@ button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; fo
 .ballot .nay { background: #efa0a0; }
 .caught-up { text-align: center; animation: arrive .8s ease both; }
 .caught-up p { font: 2rem Georgia, serif; color: var(--gold); }
+.remaining { position: sticky; top: 0; z-index: 1; background: var(--burgundy); color: var(--gold); padding: 1rem; font-weight: 700; }
+.final-card { margin: 1rem 0; }
+.final-card h2 { margin-top: 0; }
+.final-card button { min-width: 3.5rem; font-size: 1.5rem; margin-right: .5rem; }
+.tokens { min-height: 1.5rem; color: var(--gold); letter-spacing: .3rem; }
+.tokens span { display: inline-block; animation: token-arrive .25s ease both; }
+@keyframes token-arrive { from { opacity: 0; transform: scale(.4) translateY(.4rem); } to { opacity: 1; transform: scale(1) translateY(0); } }
 @keyframes arrive { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .caught-up { animation: none; } }

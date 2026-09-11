@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 export type ApprovalChoice = "yay" | "nay";
-export type NameElection = { id: string; phase: string; revealFrontier?: number; presentationPosition?: number };
+export type NameElection = { id: string; phase: string; revealFrontier?: number; presentationPosition?: number; finalistIds?: number[]; voteTokenAllowance?: number; winnerSuggestionId?: number | null };
 
 export type DraftNameElection = NameElection;
 
@@ -36,6 +36,8 @@ export type ApprovalOverview = ApprovalState & {
   fullyCaughtUpCount: number;
   participants: ApprovalParticipantProgress[];
 };
+export type ApprovalResult = Suggestion & { yayCount: number; nayCount: number; unansweredCount: number; approvalScore: number };
+export type FinalistPreparation = { finalistIds: number[]; voteTokenAllowance: number; winnerSuggestionId?: number | null };
 
 export type NameElectionTransaction = {
   findElection(): Promise<DraftNameElection | null>;
@@ -55,6 +57,8 @@ export type NameElectionTransaction = {
   listApprovalChoices?(participantId?: number): Promise<{ suggestionId: number; participantId: number; choice: ApprovalChoice }[]>;
   saveApprovalChoice?(participantId: number, suggestionId: number, choice: ApprovalChoice): Promise<void>;
   getApprovalOverview?(): Promise<ApprovalOverview>;
+  closeApprovalRound?(): Promise<ApprovalState>;
+  saveFinalistPreparation?(preparation: FinalistPreparation): Promise<NameElection>;
 };
 
 export type NameElectionStore = {
@@ -78,6 +82,10 @@ export type NameElectionService = {
   movePresentation(position: number): Promise<ApprovalState>;
   getApprovalForInvitation(invitationToken: string): Promise<{ state: ApprovalState; participant: Participant; suggestions: ApprovalSuggestion[]; position: number } | null>;
   getApprovalOverview(): Promise<ApprovalOverview>;
+  getApprovalResults(): Promise<ApprovalResult[]>;
+  closeApprovalRound(incompleteParticipantIds?: number[]): Promise<ApprovalOverview>;
+  prepareFinalVote(suggestionIds: number[], voteTokenAllowance?: number): Promise<FinalistPreparation>;
+  declareWinner(suggestionId: number): Promise<FinalistPreparation>;
   saveApprovalChoice(invitationToken: string, suggestionId: number, choice: ApprovalChoice): Promise<void>;
 };
 
@@ -146,6 +154,20 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
   function requireApprovalMethods(transaction: NameElectionTransaction) {
     if (!transaction.openApprovalRound || !transaction.revealNext || !transaction.movePresentation || !transaction.listApprovalChoices || !transaction.saveApprovalChoice) throw new Error("Approval Round is not available");
     return transaction;
+  }
+
+  function approvalResults(suggestions: Suggestion[], choices: { suggestionId: number; participantId?: number; choice: ApprovalChoice }[], participantCount: number): ApprovalResult[] {
+    const bySuggestion = new Map<number, { yayCount: number; nayCount: number }>();
+    for (const choice of choices) {
+      const count = bySuggestion.get(choice.suggestionId) ?? { yayCount: 0, nayCount: 0 };
+      count[choice.choice === "yay" ? "yayCount" : "nayCount"] += 1;
+      bySuggestion.set(choice.suggestionId, count);
+    }
+    return suggestions.map((suggestion) => {
+      const { yayCount, nayCount } = bySuggestion.get(suggestion.id) ?? { yayCount: 0, nayCount: 0 };
+      const submitted = yayCount + nayCount;
+      return { ...suggestion, yayCount, nayCount, unansweredCount: Math.max(0, participantCount - submitted), approvalScore: submitted ? yayCount / submitted : 0 };
+    }).sort((left, right) => right.yayCount - left.yayCount || right.approvalScore - left.approvalScore || left.position - right.position);
   }
 
   return {
@@ -261,6 +283,45 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
           return { participantId: participant.id, displayLabel: participant.displayLabel, invitationStatus: "active" as const, lastActivityAt: participant.lastActivityAt ?? null, completionState: count >= revealedCount && revealedCount > 0 ? "complete" as const : count > 0 ? "in-progress" as const : "not-started" as const };
         }),
       };
+    }),
+    getApprovalResults: () => store.transaction(async (transaction) => {
+      const state = await approvalState(transaction);
+      if (state.phase !== "approval-closed" && state.phase !== "final-prepared" && state.phase !== "complete") throw new Error("Approval Round är inte stängd");
+      return approvalResults(await transaction.listSuggestions(), await transaction.listApprovalChoices!(), (await transaction.listParticipants()).length);
+    }),
+    closeApprovalRound: (confirmedIds = []) => store.transaction(async (transaction) => {
+      const state = await approvalState(transaction);
+      if (state.phase === "approval-closed" || state.phase === "final-prepared" || state.phase === "complete") {
+        const roster = await transaction.listParticipants();
+        const choices = await transaction.listApprovalChoices!();
+        return { ...state, answeredCount: 0, fullyCaughtUpCount: 0, participants: roster.map((participant) => ({ participantId: participant.id, displayLabel: participant.displayLabel, invitationStatus: "active" as const, lastActivityAt: participant.lastActivityAt ?? null, completionState: choices.filter((choice) => choice.participantId === participant.id).length >= state.suggestionCount ? "complete" as const : choices.some((choice) => choice.participantId === participant.id) ? "in-progress" as const : "not-started" as const })) };
+      }
+      if (state.phase !== "approval-open") throw new Error("Approval Round kan inte stängas nu");
+      if (state.revealFrontier < state.suggestionCount - 1) throw new Error("Alla Suggestions måste avslöjas innan Approval Round stängs");
+      const roster = await transaction.listParticipants();
+      const choices = await transaction.listApprovalChoices!();
+      const incomplete = roster.filter((participant) => choices.filter((choice) => choice.participantId === participant.id).length < state.suggestionCount);
+      const expected = incomplete.map(({ id }) => id).sort((a, b) => a - b);
+      if (expected.join(",") !== [...confirmedIds].sort((a, b) => a - b).join(",")) throw new Error(`Bekräfta ofullständiga Ballots: ${incomplete.map(({ displayLabel }) => displayLabel).join(", ") || "inga"}`);
+      await requireApprovalMethods(transaction).closeApprovalRound!();
+      const next = await approvalState(transaction);
+      return { ...next, answeredCount: 0, fullyCaughtUpCount: 0, participants: roster.map((participant) => ({ participantId: participant.id, displayLabel: participant.displayLabel, invitationStatus: "active" as const, lastActivityAt: participant.lastActivityAt ?? null, completionState: "complete" as const })) };
+    }),
+    prepareFinalVote: (suggestionIds, voteTokenAllowance = 3) => store.transaction(async (transaction) => {
+      const state = await approvalState(transaction);
+      if (state.phase !== "approval-closed") throw new Error("Finalister kan bara förberedas efter stängd Approval Round");
+      const suggestions = await transaction.listSuggestions();
+      if (!Number.isInteger(voteTokenAllowance) || voteTokenAllowance <= 0) throw new Error("Vote Token allowance måste vara ett positivt heltal");
+      if (suggestionIds.length < 2 || suggestionIds.length > 10 || new Set(suggestionIds).size !== suggestionIds.length || suggestionIds.some((id) => !suggestions.some((suggestion) => suggestion.id === id))) throw new Error("Välj mellan två och tio Finalists");
+      const saved = await transaction.saveFinalistPreparation!({ finalistIds: suggestionIds, voteTokenAllowance, winnerSuggestionId: null });
+      return { finalistIds: saved.finalistIds ?? suggestionIds, voteTokenAllowance: saved.voteTokenAllowance ?? voteTokenAllowance, winnerSuggestionId: saved.winnerSuggestionId };
+    }),
+    declareWinner: (suggestionId) => store.transaction(async (transaction) => {
+      const state = await approvalState(transaction);
+      if (state.phase !== "approval-closed") throw new Error("Winner kan bara utses efter stängd Approval Round");
+      const results = approvalResults(await transaction.listSuggestions(), await transaction.listApprovalChoices!(), (await transaction.listParticipants()).length);
+      if (!results.some((result) => result.id === suggestionId)) throw new Error("Suggestion finns inte");
+      return transaction.saveFinalistPreparation!({ finalistIds: [], voteTokenAllowance: 0, winnerSuggestionId: suggestionId }).then((saved) => ({ finalistIds: saved.finalistIds ?? [], voteTokenAllowance: saved.voteTokenAllowance ?? 0, winnerSuggestionId: saved.winnerSuggestionId }));
     }),
     saveApprovalChoice: (invitationToken, suggestionId, choice) => store.transaction(async (transaction) => {
       if (choice !== "yay" && choice !== "nay") throw new Error("Valet måste vara Ja eller Nej");

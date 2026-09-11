@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, pgEnum, pgTable, timestamp, uuid, integer, serial, text, unique, uniqueIndex } from "drizzle-orm/pg-core";
 
-export const electionPhase = pgEnum("election_phase", ["draft", "approval-open", "approval-closed"]);
+export const electionPhase = pgEnum("election_phase", ["draft", "approval-open", "approval-closed", "final-prepared", "complete"]);
 export const approvalChoice = pgEnum("approval_choice", ["yay", "nay"]);
 
 export const singletonElectionId = "00000000-0000-0000-0000-000000000001";
@@ -11,6 +11,9 @@ export const elections = pgTable("elections", {
   phase: electionPhase("phase").notNull().default("draft"),
   revealFrontier: integer("reveal_frontier").notNull().default(-1),
   presentationPosition: integer("presentation_position").notNull().default(-1),
+  finalistIds: integer("finalist_ids").array().notNull().default(sql`'{}'::integer[]`),
+  voteTokenAllowance: integer("vote_token_allowance").notNull().default(3),
+  winnerSuggestionId: integer("winner_suggestion_id"),
   stateVersion: integer("state_version").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

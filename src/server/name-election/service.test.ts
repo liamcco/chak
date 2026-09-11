@@ -148,4 +148,30 @@ describe("NameElectionService", () => {
 
     await expect(service.getApprovalForInvitation("mine")).resolves.toMatchObject({ position: 1, suggestions: [{ choice: "yay" }, { choice: null }, { choice: null }] });
   });
+
+  it("closes only after reveal, counts partial Ballots, and ranks deterministic results", async () => {
+    let phase = "approval-open";
+    const suggestions = [1, 2].map((id, position) => ({ id, position, suggestion: `Name ${id}`, motivation: `Why ${id}` }));
+    const participants = [{ id: 10, displayLabel: "Alice", invitationToken: "a" }, { id: 11, displayLabel: "Bob", invitationToken: "b" }];
+    const choices = [{ suggestionId: 1, participantId: 10, choice: "yay" as const }, { suggestionId: 1, participantId: 11, choice: "nay" as const }, { suggestionId: 2, participantId: 10, choice: "yay" as const }];
+    const service = createNameElectionService({ transaction: async (operation) => operation({
+      findElection: async () => ({ id: "election-1", phase, revealFrontier: 1, presentationPosition: 1 }),
+      insertDraftElection: async () => { throw new Error("not needed"); }, listSuggestions: async () => suggestions,
+      replaceSuggestions: async () => suggestions, reorderSuggestions: async () => suggestions, ...noParticipants, listParticipants: async () => participants,
+      openApprovalRound: async () => ({ id: "election-1", phase, revealFrontier: 1, presentationPosition: 1, suggestionCount: 2 }),
+      revealNext: async () => { throw new Error("not needed"); }, movePresentation: async () => { throw new Error("not needed"); },
+      listApprovalChoices: async () => choices, saveApprovalChoice: async () => undefined,
+      closeApprovalRound: async () => { phase = "approval-closed"; return { id: "election-1", phase, revealFrontier: 1, presentationPosition: 1, suggestionCount: 2 }; },
+      saveFinalistPreparation: async ({ finalistIds, voteTokenAllowance, winnerSuggestionId }) => ({ id: "election-1", phase: "final-prepared", finalistIds, voteTokenAllowance, winnerSuggestionId }),
+    }) });
+
+    await expect(service.closeApprovalRound()).rejects.toThrow("Bekräfta ofullständiga");
+    await expect(service.closeApprovalRound([11])).resolves.toMatchObject({ phase: "approval-closed" });
+    await expect(service.getApprovalResults()).resolves.toMatchObject([
+      { id: 2, yayCount: 1, nayCount: 0, unansweredCount: 1, approvalScore: 1 },
+      { id: 1, yayCount: 1, nayCount: 1, unansweredCount: 0, approvalScore: 0.5 },
+    ]);
+    await expect(service.prepareFinalVote([1], 3)).rejects.toThrow("två och tio");
+    await expect(service.prepareFinalVote([1, 2], 4)).resolves.toEqual({ finalistIds: [1, 2], voteTokenAllowance: 4, winnerSuggestionId: null });
+  });
 });

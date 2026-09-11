@@ -1,7 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/server/db/client";
 import { approvalChoices, elections, participants, singletonElectionId, suggestions } from "@/server/db/schema";
-import type { ApprovalChoice, ApprovalState, NameElectionStore } from "./service";
+import type { ApprovalChoice, ApprovalState, FinalistPreparation, NameElectionStore } from "./service";
 
 export const postgresNameElectionStore: NameElectionStore = {
   transaction: (operation) => db.transaction(async (transaction) => {
@@ -26,7 +26,7 @@ export const postgresNameElectionStore: NameElectionStore = {
     return operation({
     findElection: async () => {
       const election = await transaction.query.elections.findFirst();
-      return election ? { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition } : null;
+      return election ? { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId } : null;
     },
     insertDraftElection: async () => {
       const [election] = await transaction.insert(elections).values({ id: singletonElectionId, phase: "draft" }).onConflictDoNothing().returning();
@@ -35,7 +35,7 @@ export const postgresNameElectionStore: NameElectionStore = {
         if (!existing) throw new Error("The Draft Name Election could not be established");
         return { id: existing.id, phase: existing.phase };
       }
-      return { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition };
+      return { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition, finalistIds: election.finalistIds, voteTokenAllowance: election.voteTokenAllowance, winnerSuggestionId: election.winnerSuggestionId };
     },
     listSuggestions,
     replaceSuggestions: async (nextSuggestions) => {
@@ -89,6 +89,15 @@ export const postgresNameElectionStore: NameElectionStore = {
     saveApprovalChoice: async (participantId, suggestionId, choice: ApprovalChoice) => {
       await transaction.insert(approvalChoices).values({ electionId: singletonElectionId, participantId, suggestionId, choice, updatedAt: new Date() }).onConflictDoUpdate({ target: [approvalChoices.participantId, approvalChoices.suggestionId], set: { choice, updatedAt: new Date() } });
       await transaction.update(participants).set({ lastActivityAt: new Date() }).where(eq(participants.id, participantId));
+    },
+    closeApprovalRound: async () => {
+      await transaction.update(elections).set({ phase: "approval-closed", stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId));
+      return state();
+    },
+    saveFinalistPreparation: async (preparation: FinalistPreparation) => {
+      const [updated] = await transaction.update(elections).set({ phase: preparation.winnerSuggestionId ? "complete" : "final-prepared", finalistIds: preparation.finalistIds, voteTokenAllowance: preparation.voteTokenAllowance, winnerSuggestionId: preparation.winnerSuggestionId ?? null, stateVersion: sql`${elections.stateVersion} + 1`, updatedAt: new Date() }).where(eq(elections.id, singletonElectionId)).returning();
+      if (!updated) throw new Error("Finalistkonfigurationen kunde inte sparas");
+      return { id: updated.id, phase: updated.phase, revealFrontier: updated.revealFrontier, presentationPosition: updated.presentationPosition, finalistIds: updated.finalistIds, voteTokenAllowance: updated.voteTokenAllowance, winnerSuggestionId: updated.winnerSuggestionId };
     },
     });
   }),

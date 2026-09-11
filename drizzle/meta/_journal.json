@@ -43,6 +43,13 @@
       "when": 1789141605000,
       "tag": "0005_participant_activity",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789142079262,
+      "tag": "0006_cynical_shooting_star",
+      "breakpoints": true
     }
   ]
 }

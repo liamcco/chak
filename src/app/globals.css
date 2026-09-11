@@ -22,3 +22,7 @@ button { background: var(--gold); color: #24101a; border: 0; cursor: pointer; fo
 .ballot button { margin: .5rem; min-width: 8rem; }
 .ballot .yay { background: #9ed8a4; }
 .ballot .nay { background: #efa0a0; }
+.caught-up { text-align: center; animation: arrive .8s ease both; }
+.caught-up p { font: 2rem Georgia, serif; color: var(--gold); }
+@keyframes arrive { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .caught-up { animation: none; } }

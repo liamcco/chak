@@ -29,6 +29,7 @@ export const participants = pgTable("participants", {
   electionId: uuid("election_id").notNull().references(() => elections.id, { onDelete: "cascade" }),
   displayLabel: text("display_label").notNull(),
   invitationToken: text("invitation_token").notNull().unique(),
+  lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
 }, (table) => [
   unique("participants_election_display_label_unique").on(table.electionId, table.displayLabel),
   uniqueIndex("participants_election_display_label_normalized_unique").on(table.electionId, sql`lower(${table.displayLabel})`),

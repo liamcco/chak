@@ -133,4 +133,19 @@ describe("NameElectionService", () => {
     await expect(service.replaceSuggestions(imported)).rejects.toThrow("only be changed during Draft");
     await expect(service.reorderSuggestions([])).rejects.toThrow("only be changed during Draft");
   });
+
+  it("returns the earliest unanswered revealed Suggestion without exposing other Participants' choices", async () => {
+    const suggestions = [0, 1, 2].map((position) => ({ id: position + 1, position, suggestion: `Name ${position}`, motivation: `Why ${position}` }));
+    const choices = [{ suggestionId: 1, participantId: 10, choice: "yay" as const }, { suggestionId: 2, participantId: 11, choice: "nay" as const }];
+    const service = createNameElectionService({ transaction: async (operation) => operation({
+      findElection: async () => ({ id: "election-1", phase: "approval-open", revealFrontier: 2, presentationPosition: 2 }),
+      insertDraftElection: async () => { throw new Error("not needed"); }, listSuggestions: async () => suggestions,
+      replaceSuggestions: async () => suggestions, reorderSuggestions: async () => suggestions, ...noParticipants,
+      findParticipantByInvitation: async (token) => token === "mine" ? { id: 10, displayLabel: "Maja", invitationToken: token } : null,
+      listApprovalChoices: async (participantId) => choices.filter((choice) => choice.participantId === participantId),
+      saveApprovalChoice: async () => undefined,
+    }) });
+
+    await expect(service.getApprovalForInvitation("mine")).resolves.toMatchObject({ position: 1, suggestions: [{ choice: "yay" }, { choice: null }, { choice: null }] });
+  });
 });

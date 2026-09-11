@@ -19,10 +19,23 @@ export type Participant = {
   id: number;
   displayLabel: string;
   invitationToken: string;
+  lastActivityAt?: Date | null;
 };
 
 export type ApprovalState = NameElection & { revealFrontier: number; presentationPosition: number; suggestionCount: number };
 export type ApprovalSuggestion = Suggestion & { responseCount?: number; choice?: ApprovalChoice | null };
+export type ApprovalParticipantProgress = {
+  participantId: number;
+  displayLabel: string;
+  invitationStatus: "active";
+  lastActivityAt: Date | null;
+  completionState: "not-started" | "in-progress" | "complete";
+};
+export type ApprovalOverview = ApprovalState & {
+  answeredCount: number;
+  fullyCaughtUpCount: number;
+  participants: ApprovalParticipantProgress[];
+};
 
 export type NameElectionTransaction = {
   findElection(): Promise<DraftNameElection | null>;
@@ -41,6 +54,7 @@ export type NameElectionTransaction = {
   movePresentation?(position: number): Promise<ApprovalState>;
   listApprovalChoices?(participantId?: number): Promise<{ suggestionId: number; participantId: number; choice: ApprovalChoice }[]>;
   saveApprovalChoice?(participantId: number, suggestionId: number, choice: ApprovalChoice): Promise<void>;
+  getApprovalOverview?(): Promise<ApprovalOverview>;
 };
 
 export type NameElectionStore = {
@@ -62,7 +76,8 @@ export type NameElectionService = {
   openApprovalRound(): Promise<ApprovalState>;
   revealNext(): Promise<ApprovalState>;
   movePresentation(position: number): Promise<ApprovalState>;
-  getApprovalForInvitation(invitationToken: string): Promise<{ state: ApprovalState; participant: Participant; suggestions: ApprovalSuggestion[] } | null>;
+  getApprovalForInvitation(invitationToken: string): Promise<{ state: ApprovalState; participant: Participant; suggestions: ApprovalSuggestion[]; position: number } | null>;
+  getApprovalOverview(): Promise<ApprovalOverview>;
   saveApprovalChoice(invitationToken: string, suggestionId: number, choice: ApprovalChoice): Promise<void>;
 };
 
@@ -225,7 +240,27 @@ export function createNameElectionService(store: NameElectionStore): NameElectio
       const choices = transaction.listApprovalChoices ? await transaction.listApprovalChoices(participant.id) : [];
       const choiceBySuggestion = new Map(choices.map((choice) => [choice.suggestionId, choice.choice]));
       const suggestions = (await transaction.listSuggestions()).filter((suggestion) => suggestion.position <= state.revealFrontier).map((suggestion) => ({ ...suggestion, choice: choiceBySuggestion.get(suggestion.id) ?? null }));
-      return { state, participant, suggestions };
+      const firstUnanswered = suggestions.findIndex((suggestion) => suggestion.choice === null);
+      return { state, participant, suggestions, position: firstUnanswered >= 0 ? firstUnanswered : Math.max(0, Math.min(state.presentationPosition, suggestions.length - 1)) };
+    }),
+    getApprovalOverview: () => store.transaction(async (transaction) => {
+      const state = await approvalState(transaction);
+      const roster = await transaction.listParticipants();
+      const choices = transaction.listApprovalChoices ? await transaction.listApprovalChoices() : [];
+      const revealedCount = Math.max(0, state.revealFrontier + 1);
+      const presentationSuggestion = (await transaction.listSuggestions()).find((suggestion) => suggestion.position === state.presentationPosition);
+      const answeredCount = presentationSuggestion ? choices.filter((choice) => choice.suggestionId === presentationSuggestion.id).length : 0;
+      const counts = new Map<number, number>();
+      for (const choice of choices) counts.set(choice.participantId, (counts.get(choice.participantId) ?? 0) + 1);
+      return {
+        ...state,
+        answeredCount,
+        fullyCaughtUpCount: revealedCount === 0 ? 0 : roster.filter((participant) => (counts.get(participant.id) ?? 0) >= revealedCount).length,
+        participants: roster.map((participant) => {
+          const count = counts.get(participant.id) ?? 0;
+          return { participantId: participant.id, displayLabel: participant.displayLabel, invitationStatus: "active" as const, lastActivityAt: participant.lastActivityAt ?? null, completionState: count >= revealedCount && revealedCount > 0 ? "complete" as const : count > 0 ? "in-progress" as const : "not-started" as const };
+        }),
+      };
     }),
     saveApprovalChoice: (invitationToken, suggestionId, choice) => store.transaction(async (transaction) => {
       if (choice !== "yay" && choice !== "nay") throw new Error("Valet måste vara Ja eller Nej");

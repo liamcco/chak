@@ -15,6 +15,7 @@ export const postgresNameElectionStore: NameElectionStore = {
       id: participants.id,
       displayLabel: participants.displayLabel,
       invitationToken: participants.invitationToken,
+      lastActivityAt: participants.lastActivityAt,
     }).from(participants).where(eq(participants.electionId, singletonElectionId)).orderBy(asc(participants.id));
     const state = async (): Promise<ApprovalState> => {
       const election = await transaction.query.elections.findFirst();
@@ -25,7 +26,7 @@ export const postgresNameElectionStore: NameElectionStore = {
     return operation({
     findElection: async () => {
       const election = await transaction.query.elections.findFirst();
-      return election ? { id: election.id, phase: election.phase } : null;
+      return election ? { id: election.id, phase: election.phase, revealFrontier: election.revealFrontier, presentationPosition: election.presentationPosition } : null;
     },
     insertDraftElection: async () => {
       const [election] = await transaction.insert(elections).values({ id: singletonElectionId, phase: "draft" }).onConflictDoNothing().returning();
@@ -87,6 +88,7 @@ export const postgresNameElectionStore: NameElectionStore = {
     listApprovalChoices: async (participantId) => transaction.select({ suggestionId: approvalChoices.suggestionId, participantId: approvalChoices.participantId, choice: approvalChoices.choice }).from(approvalChoices).where(participantId === undefined ? eq(approvalChoices.electionId, singletonElectionId) : sql`${approvalChoices.electionId} = ${singletonElectionId}::uuid AND ${approvalChoices.participantId} = ${participantId}`),
     saveApprovalChoice: async (participantId, suggestionId, choice: ApprovalChoice) => {
       await transaction.insert(approvalChoices).values({ electionId: singletonElectionId, participantId, suggestionId, choice, updatedAt: new Date() }).onConflictDoUpdate({ target: [approvalChoices.participantId, approvalChoices.suggestionId], set: { choice, updatedAt: new Date() } });
+      await transaction.update(participants).set({ lastActivityAt: new Date() }).where(eq(participants.id, participantId));
     },
     });
   }),

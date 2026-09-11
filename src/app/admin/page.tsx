@@ -10,5 +10,6 @@ export default async function AdminPage() {
   const election = await nameElectionService.establishDraft();
   const suggestions = await nameElectionService.listSuggestions();
   const participants = await nameElectionService.listParticipants();
-  return <main><p>ADMINISTRATÖR</p><h1>Namnvalet väntar</h1><section className="card"><h2>Utkast</h2><p>Förbered Suggestions innan Approval Round öppnas.</p><p>Election-ID: {election.id}</p><form action={logout}><button type="submit">Logga ut</button></form></section>{election.phase === "draft" ? <><ParticipantsSetup initialParticipants={participants} /><SuggestionsSetup initialSuggestions={suggestions} /></> : null}<ApprovalControls initialState={election} /></main>;
+  const overview = await nameElectionService.getApprovalOverview();
+  return <main><p>ADMINISTRATÖR</p><h1>Namnvalet väntar</h1><section className="card"><h2>Utkast</h2><p>Förbered Suggestions innan Approval Round öppnas.</p><p>Election-ID: {election.id}</p><form action={logout}><button type="submit">Logga ut</button></form></section>{election.phase === "draft" ? <><ParticipantsSetup initialParticipants={participants} /><SuggestionsSetup initialSuggestions={suggestions} /></> : null}<ApprovalControls initialState={election} overview={overview} /></main>;
 }
